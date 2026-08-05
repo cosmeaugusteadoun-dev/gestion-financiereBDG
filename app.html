@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Les Bulles de Joie — Gestion</title>
+<link rel="icon" href="assets/img/logo.jpg" type="image/jpeg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ============ EN-TÊTE ============ -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="topbar-logo"><img src="assets/img/logo.jpg" alt="Logo" onerror="this.style.display='none'"></div>
+      <div>
+        <div class="topbar-title">Les Bulles de Joie</div>
+        <div class="topbar-sub">Année 2026–2027</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn-logout" id="btnLogout">Déconnexion</button>
+    </div>
+  </header>
+
+  <!-- ============ NAVIGATION ONGLETS ============ -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-btn active" data-tab="dashboard"><i class="bi bi-speedometer2"></i> Tableau de bord</button>
+    <button class="tab-btn" data-tab="enfants"><i class="bi bi-people"></i> Dossiers enfants</button>
+    <button class="tab-btn" data-tab="entrees"><i class="bi bi-box-arrow-in-down"></i> Entrées</button>
+    <button class="tab-btn" data-tab="sorties"><i class="bi bi-box-arrow-up"></i> Sorties</button>
+    <button class="tab-btn" data-tab="bilans"><i class="bi bi-graph-up"></i> Bilans secteurs</button>
+    <button class="tab-btn" data-tab="whatsapp"><i class="bi bi-whatsapp"></i> WhatsApp</button>
+    <button class="tab-btn" data-tab="notes"><i class="bi bi-journal-bookmark"></i> Notes &amp; Suivi</button>
+    <button class="tab-btn" data-tab="messagerie"><i class="bi bi-megaphone"></i> Messagerie</button>
+    <button class="tab-btn" data-tab="general"><i class="bi bi-bar-chart-fill"></i> Bilan général</button>
+  </nav>
+
+  <main class="main-content">
+
+    <!-- ============ 1. TABLEAU DE BORD ============ -->
+    <section class="tab-panel active" id="tab-dashboard">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Tableau de bord</div>
+          <div class="section-desc">Vue d'ensemble de l'école aujourd'hui</div>
+        </div>
+      </div>
+
+      <div class="metrics-grid" id="dashMetrics"></div>
+
+      <div class="charts-grid" id="dashCharts"></div>
+
+      <div class="card">
+        <div class="card-title"><i class="bi bi-exclamation-octagon-fill text-red"></i> Alertes de retard</div>
+        <div id="dashAlertes"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><i class="bi bi-calendar-heart text-gold"></i> Anniversaires — 7 prochains jours</div>
+        <div id="dashAnniversaires"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><i class="bi bi-credit-card"></i> 5 derniers paiements</div>
+        <div id="dashDerniers"></div>
+      </div>
+    </section>
+
+    <!-- ============ 2. DOSSIERS ENFANTS ============ -->
+    <section class="tab-panel" id="tab-enfants">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Dossiers enfants</div>
+          <div class="section-desc">Créer et consulter les fiches élèves</div>
+        </div>
+        <button class="btn btn-secondary" id="btnExportCsv"><i class="bi bi-download"></i> Exporter CSV</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><i class="bi bi-plus-circle"></i> Nouveau dossier</div>
+        <form id="formEnfant" class="form-grid" autocomplete="off">
+          <div class="field">
+            <label>Nom complet de l'enfant <span class="req">*</span></label>
+            <input type="text" id="fNom" required placeholder="Ex. Adéyèmi KOSSOU">
+          </div>
+          <div class="field">
+            <label>Section <span class="req">*</span></label>
+            <select id="fSect" required>
+              <option value="">— Choisir —</option>
+              <option value="creche">Crèche</option>
+              <option value="garderie">Garderie midi</option>
+              <option value="premat">Prématernelle</option>
+              <option value="mat1">Maternelle 1</option>
+              <option value="mat2">Maternelle 2</option>
+              <option value="ci">CI</option>
+              <option value="cp">CP</option>
+              <option value="ce1">CE1</option>
+              <option value="ce2">CE2</option>
+              <option value="cm1">CM1</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Statut</label>
+            <div class="radio-row">
+              <label class="radio-item"><input type="radio" name="fStat" value="nouveau" checked> Nouveau</label>
+              <label class="radio-item"><input type="radio" name="fStat" value="ancien"> Ancien</label>
+            </div>
+          </div>
+          <div class="field">
+            <label>Sexe</label>
+            <select id="fSexe">
+              <option value="">— Non renseigné —</option>
+              <option value="F">Fille</option>
+              <option value="M">Garçon</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Civilité du parent</label>
+            <select id="fCivilite">
+              <option value="—">—</option>
+              <option value="Monsieur">Monsieur</option>
+              <option value="Madame">Madame</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Nom du parent</label>
+            <input type="text" id="fParent" placeholder="Ex. KOSSOU Bernard">
+          </div>
+          <div class="field">
+            <label>Téléphone du parent (WhatsApp)</label>
+            <input type="tel" id="fTel" placeholder="Ex. 97 12 34 56">
+          </div>
+          <div class="field">
+            <label>Date de naissance</label>
+            <input type="date" id="fDdn">
+          </div>
+          <div class="field">
+            <label>Année scolaire</label>
+            <input type="text" id="fAnnee" value="2026-2027" readonly>
+          </div>
+
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>Services souscrits</label>
+            <div class="checkbox-grid" id="fServices">
+              <label class="checkbox-item" data-svc="ptdej"><input type="checkbox" id="svcPtdej"> Petit-déjeuner</label>
+              <label class="checkbox-item" data-svc="dej"><input type="checkbox" id="svcDej"> Déjeuner</label>
+              <label class="checkbox-item" data-svc="gout"><input type="checkbox" id="svcGout"> Goûter</label>
+              <label class="checkbox-item" data-svc="gard"><input type="checkbox" id="svcGard"> Garderie midi</label>
+              <label class="checkbox-item" data-svc="unif"><input type="checkbox" id="svcUnif"> Uniformes</label>
+              <label class="checkbox-item" data-svc="four"><input type="checkbox" id="svcFour"> Fournitures</label>
+              <label class="checkbox-item" data-svc="cantC"><input type="checkbox" id="svcCantC"> Cantine crèche</label>
+              <label class="checkbox-item" data-svc="halte"><input type="checkbox" id="svcHalte"> Halte-garderie (3 000 F/jour)</label>
+              <label class="checkbox-item" data-svc="samedi"><input type="checkbox" id="svcSamedi"> Journée du samedi (3 500 F/jour)</label>
+              <label class="checkbox-item" data-svc="nuitee"><input type="checkbox" id="svcNuitee"> Nuitée (3 500 F/nuit)</label>
+            </div>
+            <div class="field-hint">Les services non disponibles pour la section choisie sont automatiquement désactivés.</div>
+          </div>
+
+          <div class="field">
+            <label>Remise accordée (F CFA)</label>
+            <input type="number" id="fRemise" min="0" step="500" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Remise applicable sur</label>
+            <select id="fRemiseCible">
+              <option value="Cantine">Mensualité cantine</option>
+              <option value="Crèche">Mensualité crèche</option>
+            </select>
+          </div>
+
+          <div class="form-actions" style="grid-column: 1 / -1;">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Créer le dossier</button>
+            <button type="button" class="btn btn-ghost" id="btnResetEnfant">Réinitialiser</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-wrap">
+          <i class="bi bi-search"></i>
+          <input type="text" id="rechEnfant" placeholder="Rechercher un enfant par nom...">
+        </div>
+        <select id="filtreSect">
+          <option value="">Toutes les sections</option>
+          <option value="creche">Crèche</option>
+          <option value="garderie">Garderie midi</option>
+          <option value="premat">Prématernelle</option>
+          <option value="mat1">Maternelle 1</option>
+          <option value="mat2">Maternelle 2</option>
+          <option value="ci">CI</option>
+          <option value="cp">CP</option>
+          <option value="ce1">CE1</option>
+          <option value="ce2">CE2</option>
+          <option value="cm1">CM1</option>
+        </select>
+        <select id="filtreStatutPaiement">
+          <option value="">Tous les statuts</option>
+          <option value="solde">Soldé</option>
+          <option value="partiel">Partiel</option>
+          <option value="impaye">Impayé</option>
+        </select>
+      </div>
+
+      <div class="enfant-list" id="enfantsList"></div>
+    </section>
+
+    <!-- ============ 3. ENTRÉES ============ -->
+    <section class="tab-panel" id="tab-entrees">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Entrées — Paiements reçus</div>
+          <div class="section-desc">Enregistrer un versement d'un parent</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <form id="formEntree" class="form-grid" autocomplete="off">
+          <div class="field">
+            <label>Date <span class="req">*</span></label>
+            <input type="date" id="eDate" required>
+          </div>
+          <div class="field" style="position:relative;">
+            <label>Nom du payeur / enfant <span class="req">*</span></label>
+            <input type="text" id="eNom" required placeholder="Tapez pour rechercher..." autocomplete="off">
+            <div id="eNomSuggestions" class="card" style="position:absolute; top:100%; left:0; right:0; z-index:20; padding:6px; display:none; max-height:220px; overflow-y:auto;"></div>
+          </div>
+          <div class="field">
+            <label>Montant (F CFA) <span class="req">*</span></label>
+            <input type="number" id="eMontant" required min="1" placeholder="Ex. 15000">
+          </div>
+          <div class="field">
+            <label>Mode de paiement</label>
+            <select id="eMode">
+              <option value="Espèces">Espèces</option>
+              <option value="Mobile Money">Mobile Money</option>
+              <option value="Virement">Virement</option>
+              <option value="Chèque">Chèque</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Mois concerné</label>
+            <select id="eMois">
+              <option value="">— Automatique —</option>
+              <option>Sep</option><option>Oct</option><option>Nov</option><option>Déc</option>
+              <option>Jan</option><option>Fév</option><option>Mar</option><option>Avr</option>
+              <option>Mai</option><option>Jun</option><option>Jul</option><option>Aoû</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Note</label>
+            <input type="text" id="eNote" placeholder="Optionnel">
+          </div>
+
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>Secteur(s) concerné(s) <span class="req">*</span></label>
+            <div class="checkbox-grid" id="eSecteurs">
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Scolarité Maternelle"> Scolarité Maternelle</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Scolarité Primaire"> Scolarité Primaire</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Crèche"> Crèche</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Cantine"> Cantine</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Cantine crèche"> Cantine crèche</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Halte-garderie"> Halte-garderie</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Journée du samedi"> Journée du samedi</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Nuitée"> Nuitée</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Goûter"> Goûter</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Uniformes"> Uniformes</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Fournitures"> Fournitures</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Inscription"> Inscription</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Activités parascolaires"> Activités parascolaires</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Fêtes scolaires"> Fêtes scolaires</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Assurance"> Assurance</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="APE"> APE</label>
+            </div>
+          </div>
+
+          <div class="form-actions" style="grid-column: 1 / -1;">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Enregistrer le paiement</button>
+            <button type="button" class="btn btn-ghost" id="btnResetEntree">Réinitialiser</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Historique des entrées</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Date</th><th>Nom</th><th>Secteur</th><th>Mois</th><th>Montant</th><th>Mode</th><th></th></tr>
+            </thead>
+            <tbody id="entreesList"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4. SORTIES ============ -->
+    <section class="tab-panel" id="tab-sorties">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Sorties — Dépenses de l'école</div>
+          <div class="section-desc">Suivre les charges et achats</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <form id="formSortie" class="form-grid" autocomplete="off">
+          <div class="field">
+            <label>Date <span class="req">*</span></label>
+            <input type="date" id="sDate" required>
+          </div>
+          <div class="field">
+            <label>Catégorie <span class="req">*</span></label>
+            <select id="sCat" required>
+              <option value="">— Choisir —</option>
+              <option>Salaires</option>
+              <option>Fournitures pédagogiques</option>
+              <option>Alimentation / Cantine</option>
+              <option>Entretien & réparations</option>
+              <option>Eau / Électricité</option>
+              <option>Transport</option>
+              <option>Communication</option>
+              <option>Événements / Fêtes</option>
+              <option>Divers</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Libellé <span class="req">*</span></label>
+            <input type="text" id="sLabel" required placeholder="Ex. Achat de craies et cahiers">
+          </div>
+          <div class="field">
+            <label>Montant (F CFA) <span class="req">*</span></label>
+            <input type="number" id="sMontant" required min="1" placeholder="Ex. 12000">
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>Note</label>
+            <textarea id="sNote" placeholder="Optionnel"></textarea>
+          </div>
+          <div class="form-actions" style="grid-column: 1 / -1;">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Enregistrer la dépense</button>
+            <button type="button" class="btn btn-ghost" id="btnResetSortie">Réinitialiser</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Historique des sorties</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Catégorie</th><th>Libellé</th><th>Montant</th><th></th></tr></thead>
+            <tbody id="sortiesList"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 5. BILANS SECTEURS ============ -->
+    <section class="tab-panel" id="tab-bilans">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Bilans par secteur</div>
+          <div class="section-desc">Performance financière de chaque secteur de l'école</div>
+        </div>
+      </div>
+      <div id="bilansSecteurs"></div>
+    </section>
+
+    <!-- ============ 6. WHATSAPP ============ -->
+    <section class="tab-panel" id="tab-whatsapp">
+      <div class="section-header">
+        <div>
+          <div class="section-title">WhatsApp</div>
+          <div class="section-desc">Envoyer un bilan financier détaillé à un parent</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div class="search-wrap">
+            <i class="bi bi-search"></i>
+            <input type="text" id="waRecherche" placeholder="Rechercher un enfant...">
+          </div>
+        </div>
+        <div class="msg-list" id="waList"></div>
+      </div>
+    </section>
+
+    <!-- ============ 7. NOTES & SUIVI ============ -->
+    <section class="tab-panel" id="tab-notes">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Notes &amp; Suivi scolaire</div>
+          <div class="section-desc">Résultats et comportement par trimestre</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="form-grid">
+          <div class="field">
+            <label>Enfant <span class="req">*</span></label>
+            <select id="nEnfant"></select>
+          </div>
+          <div class="field">
+            <label>Trimestre <span class="req">*</span></label>
+            <select id="nTrim">
+              <option value="Trimestre 1">Trimestre 1</option>
+              <option value="Trimestre 2">Trimestre 2</option>
+              <option value="Trimestre 3">Trimestre 3</option>
+            </select>
+          </div>
+        </div>
+        <div id="notesForm" class="mt-2"></div>
+      </div>
+    </section>
+
+    <!-- ============ 8. MESSAGERIE ============ -->
+    <section class="tab-panel" id="tab-messagerie">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Messagerie collective</div>
+          <div class="section-desc">Envoyer un message WhatsApp à tous les parents</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="field mb-2">
+          <label>Message à envoyer</label>
+          <textarea id="msgTexte" rows="5" placeholder="Rédigez votre message ici..."></textarea>
+        </div>
+        <div class="toolbar">
+          <div class="search-wrap">
+            <i class="bi bi-search"></i>
+            <input type="text" id="msgRecherche" placeholder="Rechercher un parent...">
+          </div>
+          <select id="msgFiltreSect">
+            <option value="">Toutes les sections</option>
+            <option value="creche">Crèche</option>
+            <option value="garderie">Garderie midi</option>
+            <option value="premat">Prématernelle</option>
+            <option value="mat1">Maternelle 1</option>
+            <option value="mat2">Maternelle 2</option>
+            <option value="ci">CI</option>
+            <option value="cp">CP</option>
+            <option value="ce1">CE1</option>
+            <option value="ce2">CE2</option>
+            <option value="cm1">CM1</option>
+          </select>
+        </div>
+        <div class="msg-list" id="msgList"></div>
+      </div>
+    </section>
+
+    <!-- ============ 9. BILAN GÉNÉRAL ============ -->
+    <section class="tab-panel" id="tab-general">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Bilan général de l'année</div>
+          <div class="section-desc">Vue consolidée — année scolaire 2026–2027</div>
+        </div>
+      </div>
+      <div id="bilanGeneral"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Conteneur des modals -->
+<div id="modalRoot"></div>
+
+<!-- Conteneur des notifications toast -->
+<div id="toastRoot"></div>
+
+<!-- ============ SDK & SCRIPTS ============ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js?v=8"></script>
+<script src="assets/js/db.js?v=8"></script>
+<script src="assets/js/postes.js?v=8"></script>
+<script src="assets/js/whatsapp.js?v=8"></script>
+<script src="assets/js/enfants.js?v=8"></script>
+<script src="assets/js/entrees.js?v=8"></script>
+<script src="assets/js/sorties.js?v=8"></script>
+<script src="assets/js/dashboard.js?v=8"></script>
+<script src="assets/js/bilans.js?v=8"></script>
+<script src="assets/js/notes.js?v=8"></script>
+<script src="assets/js/app.js?v=8"></script>
+</body>
+</html>

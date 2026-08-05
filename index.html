@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Les Bulles de Joie — Connexion</title>
+<link rel="icon" href="assets/img/logo.jpg" type="image/jpeg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="login-body">
+
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="assets/img/logo.jpg" alt="Logo Les Bulles de Joie" onerror="this.style.display='none'">
+    </div>
+    <h1 class="login-title">Les Bulles de Joie</h1>
+    <p class="login-subtitle">CSP Bilingue · Zongo 2, Parakou</p>
+
+    <form id="loginForm" class="login-form" autocomplete="off">
+      <label for="identifiant" class="login-label">Identifiant</label>
+      <input type="text" id="identifiant" class="login-input" placeholder="Votre identifiant" autofocus required autocomplete="username">
+
+      <label for="password" class="login-label mt-1">Mot de passe</label>
+      <div class="password-wrap">
+        <input type="password" id="password" class="login-input" placeholder="Votre mot de passe" required autocomplete="current-password">
+        <button type="button" class="password-toggle" id="btnTogglePassword" aria-label="Afficher le mot de passe" title="Afficher le mot de passe">
+          <i class="bi bi-eye"></i>
+        </button>
+      </div>
+
+      <div id="loginError" class="login-error" hidden></div>
+      <button type="submit" class="btn btn-primary login-btn" id="btnConnexion">Se connecter</button>
+    </form>
+
+    <p class="login-footer">Amour · Travail · Discipline · Créativité</p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/config.js?v=8"></script>
+  <script>
+    // ============================================================
+    // Authentification de l'écran de connexion
+    // Le mot de passe n'est jamais comparé en clair : il est haché
+    // (SHA-256) avant comparaison avec l'empreinte stockée dans config.js.
+    // Un verrouillage temporaire protège contre les essais répétés.
+    // ============================================================
+    const DUREE_SESSION_MS = 12 * 60 * 60 * 1000; // 12 heures
+    const MAX_TENTATIVES = 5;
+    const DUREE_BLOCAGE_MS = 60 * 1000; // 1 minute
+
+    const form = document.getElementById("loginForm");
+    const champId = document.getElementById("identifiant");
+    const champMdp = document.getElementById("password");
+    const erreur = document.getElementById("loginError");
+    const btn = document.getElementById("btnConnexion");
+    const btnOeil = document.getElementById("btnTogglePassword");
+
+    // Affiche/masque le mot de passe saisi
+    btnOeil.addEventListener("click", () => {
+      const visible = champMdp.type === "text";
+      champMdp.type = visible ? "password" : "text";
+      btnOeil.querySelector("i").className = visible ? "bi bi-eye" : "bi bi-eye-slash";
+      btnOeil.setAttribute("aria-label", visible ? "Afficher le mot de passe" : "Masquer le mot de passe");
+      btnOeil.title = visible ? "Afficher le mot de passe" : "Masquer le mot de passe";
+      champMdp.focus();
+    });
+
+    function afficherErreur(message) {
+      erreur.textContent = message;
+      erreur.hidden = false;
+    }
+
+    // Redirige directement vers l'application si une session valide existe déjà
+    function sessionActive() {
+      try {
+        const brut = sessionStorage.getItem("bdj_session");
+        if (!brut) return false;
+        const session = JSON.parse(brut);
+        return session.actif === true && session.expire > Date.now();
+      } catch {
+        return false;
+      }
+    }
+    if (sessionActive()) window.location.href = "app.html";
+
+    // Empreinte SHA-256 (hexadécimal) d'un texte, via l'API Web Crypto
+    async function sha256Hex(texte) {
+      const donnees = new TextEncoder().encode(texte);
+      const hash = await crypto.subtle.digest("SHA-256", donnees);
+      return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    // Verrouillage anti brute-force (compteur conservé le temps de la session navigateur)
+    function getBlocage() {
+      try { return JSON.parse(sessionStorage.getItem("bdj_login_guard")) || { tentatives: 0, bloqueJusqua: 0 }; }
+      catch { return { tentatives: 0, bloqueJusqua: 0 }; }
+    }
+    function setBlocage(guard) {
+      sessionStorage.setItem("bdj_login_guard", JSON.stringify(guard));
+    }
+
+    function appliquerEtatBlocage() {
+      const guard = getBlocage();
+      const restant = guard.bloqueJusqua - Date.now();
+      if (restant > 0) {
+        btn.disabled = true;
+        champId.disabled = true;
+        champMdp.disabled = true;
+        afficherErreur(`Trop de tentatives. Réessayez dans ${Math.ceil(restant / 1000)} seconde(s).`);
+        setTimeout(appliquerEtatBlocage, 1000);
+      } else {
+        btn.disabled = false;
+        champId.disabled = false;
+        champMdp.disabled = false;
+      }
+    }
+    appliquerEtatBlocage();
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      erreur.hidden = true;
+
+      const guard = getBlocage();
+      if (guard.bloqueJusqua > Date.now()) { appliquerEtatBlocage(); return; }
+
+      const identifiant = champId.value.trim();
+      const motDePasse = champMdp.value;
+
+      btn.disabled = true;
+      btn.textContent = "Connexion…";
+
+      // Toute la logique de connexion est protégée : aucune erreur inattendue
+      // (stockage de session bloqué, API indisponible, etc.) ne doit pouvoir
+      // laisser le bouton bloqué sans retour visible pour l'utilisatrice.
+      let redirection = false;
+      try {
+        let empreinte;
+        try {
+          empreinte = await sha256Hex(motDePasse);
+        } catch (err) {
+          console.error("Web Crypto indisponible :", err);
+          afficherErreur("Votre navigateur ne permet pas une connexion sécurisée ici. Ouvrez le site via http(s) plutôt qu'en fichier local.");
+          return;
+        }
+
+        const identifiantValide = identifiant === APP_USERNAME;
+        const motDePasseValide = empreinte === APP_PASSWORD_HASH;
+
+        if (identifiantValide && motDePasseValide) {
+          setBlocage({ tentatives: 0, bloqueJusqua: 0 });
+          sessionStorage.setItem("bdj_session", JSON.stringify({ actif: true, expire: Date.now() + DUREE_SESSION_MS }));
+          redirection = true;
+          window.location.href = "app.html";
+          return;
+        }
+
+        const tentatives = (guard.tentatives || 0) + 1;
+        if (tentatives >= MAX_TENTATIVES) {
+          setBlocage({ tentatives: 0, bloqueJusqua: Date.now() + DUREE_BLOCAGE_MS });
+          appliquerEtatBlocage();
+        } else {
+          setBlocage({ tentatives, bloqueJusqua: 0 });
+          afficherErreur(`Identifiant ou mot de passe incorrect. (${MAX_TENTATIVES - tentatives} essai(s) restant(s))`);
+        }
+
+        champMdp.value = "";
+        champMdp.focus();
+      } catch (err) {
+        // Filet de sécurité : une erreur imprévue (ex. sessionStorage bloqué
+        // par le navigateur ou une extension) ne doit jamais bloquer l'écran.
+        console.error("Erreur inattendue lors de la connexion :", err);
+        afficherErreur(`Erreur technique : ${err.message || err}. Vérifiez que le stockage de session (sessionStorage) n'est pas bloqué par votre navigateur ou une extension.`);
+      } finally {
+        if (!redirection) {
+          btn.disabled = false;
+          btn.textContent = "Se connecter";
+        }
+      }
+    });
+  </script>
+</body>
+</html>
