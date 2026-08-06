@@ -20,6 +20,8 @@
   --red-l:    #ffebee;
   --orange:   #e65100;
   --orange-l: #fff3e0;
+  --blue:     #1c5cab;
+  --blue-l:   #e7eefb;
   --gray:     #f4f5f7;
   --border:   #e2e4e8;
   --text:     #1a1a2e;
@@ -420,7 +422,7 @@ textarea { resize: vertical; min-height: 70px; }
 
 .checkbox-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(2, 1fr); /* toujours 2 colonnes sur mobile, pour tout voir sans défiler */
   gap: 10px;
   margin-top: 4px;
 }
@@ -737,6 +739,10 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .text-green { color: var(--green); }
 .text-red { color: var(--red); }
 .text-orange { color: var(--orange); }
+.text-blue { color: var(--blue); }
+.text-pink { color: var(--pink); }
+.text-navy { color: var(--navy); }
+.text-gold { color: #8a6d1a; }
 .text-center { text-align: center; }
 .mt-1 { margin-top: 8px; }
 .mt-2 { margin-top: 16px; }
@@ -778,6 +784,74 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
 .toast.toast-success { background: var(--green); }
 .toast.toast-error { background: var(--red); }
+
+/* ============================================================
+   GRILLE D'APPRÉCIATIONS (onglet "Notes & Suivi")
+   ============================================================ */
+.grille-appreciation {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.grille-item {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+}
+.grille-item strong { font-size: 13.5px; }
+.grille-danger { background: var(--red-l); color: var(--red); }
+.grille-orange { background: var(--orange-l); color: var(--orange); }
+.grille-gold   { background: var(--gold-l);   color: #8a6d1a; }
+.grille-green  { background: var(--green-l);  color: var(--green); }
+
+.alert-banner {
+  background: var(--red);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================================
+   CARTES SECTEUR (onglet "Bilans secteurs")
+   ============================================================ */
+.secteur-card { border-left: 4px solid transparent; }
+.secteur-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.secteur-card-titre { font-family: var(--font-heading); font-weight: 800; font-size: 15px; color: var(--navy); }
+.secteur-card-total { font-family: var(--font-heading); font-weight: 800; font-size: 15px; }
+.secteur-card-solde {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-top: 10px;
+  color: #fff;
+  font-size: 13px;
+}
+.secteur-card-solde strong { font-family: var(--font-heading); font-size: 14.5px; }
+.secteur-solde-pink   { background: var(--pink); }
+.secteur-solde-navy   { background: var(--navy); }
+.secteur-solde-green  { background: var(--green); }
+.secteur-solde-gold   { background: var(--gold); }
+.secteur-solde-blue   { background: var(--blue); }
+.secteur-solde-orange { background: var(--orange); }
+.secteur-solde-red    { background: var(--red); }
 
 /* ============================================================
    GRAPHIQUES (diagrammes circulaires + diagramme en bandes)
@@ -872,6 +946,8 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .main-content { padding: 24px 24px 60px; }
   .topbar { padding: 14px 24px; }
   .tabbar { padding: 0 12px; }
+  .checkbox-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .grille-appreciation { grid-template-columns: repeat(4, 1fr); }
 }
 
 @media (min-width: 900px) {

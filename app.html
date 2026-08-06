@@ -57,9 +57,20 @@
 
       <div class="charts-grid" id="dashCharts"></div>
 
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-title"><i class="bi bi-exclamation-octagon-fill text-red"></i> Alertes de retard</div>
+          <div id="dashAlertes"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><i class="bi bi-graph-up-arrow"></i> Recettes par secteur</div>
+          <div id="dashRecettesSecteur"></div>
+        </div>
+      </div>
+
       <div class="card">
-        <div class="card-title"><i class="bi bi-exclamation-octagon-fill text-red"></i> Alertes de retard</div>
-        <div id="dashAlertes"></div>
+        <div class="card-title"><i class="bi bi-telephone-outbound-fill"></i> Parents à relancer</div>
+        <div id="dashParentsRelancer"></div>
       </div>
 
       <div class="card">
@@ -152,15 +163,22 @@
               <label class="checkbox-item" data-svc="ptdej"><input type="checkbox" id="svcPtdej"> Petit-déjeuner</label>
               <label class="checkbox-item" data-svc="dej"><input type="checkbox" id="svcDej"> Déjeuner</label>
               <label class="checkbox-item" data-svc="gout"><input type="checkbox" id="svcGout"> Goûter</label>
-              <label class="checkbox-item" data-svc="gard"><input type="checkbox" id="svcGard"> Garderie midi</label>
-              <label class="checkbox-item" data-svc="unif"><input type="checkbox" id="svcUnif"> Uniformes</label>
-              <label class="checkbox-item" data-svc="four"><input type="checkbox" id="svcFour"> Fournitures</label>
+              <label class="checkbox-item" data-svc="four"><input type="checkbox" id="svcFour"> Fournitures (montant libre)</label>
               <label class="checkbox-item" data-svc="cantC"><input type="checkbox" id="svcCantC"> Cantine crèche</label>
-              <label class="checkbox-item" data-svc="halte"><input type="checkbox" id="svcHalte"> Halte-garderie (3 000 F/jour)</label>
-              <label class="checkbox-item" data-svc="samedi"><input type="checkbox" id="svcSamedi"> Journée du samedi (3 500 F/jour)</label>
-              <label class="checkbox-item" data-svc="nuitee"><input type="checkbox" id="svcNuitee"> Nuitée (3 500 F/nuit)</label>
+              <label class="checkbox-item" data-svc="halte"><input type="checkbox" id="svcHalte"> Halte-garderie / Samedi / Nuitée</label>
             </div>
             <div class="field-hint">Les services non disponibles pour la section choisie sont automatiquement désactivés.</div>
+          </div>
+
+          <div class="field" data-svc-group="unif">
+            <label>Tenues scolaires — nombre à acheter</label>
+            <input type="number" id="fQteTenue" min="0" step="1" value="0">
+            <div class="field-hint">9 000 F/unité (Primaire) · 8 000 F/unité (Maternelle) — laisser à 0 si l'ancienne tenue est réutilisée.</div>
+          </div>
+          <div class="field" data-svc-group="unif">
+            <label>Tenues de sport — nombre à acheter</label>
+            <input type="number" id="fQteSport" min="0" step="1" value="0">
+            <div class="field-hint">4 000 F/unité, tous niveaux.</div>
           </div>
 
           <div class="field">
@@ -220,6 +238,8 @@
         </div>
       </div>
 
+      <div class="metrics-grid" id="entreesMetrics"></div>
+
       <div class="card">
         <form id="formEntree" class="form-grid" autocomplete="off">
           <div class="field">
@@ -230,6 +250,7 @@
             <label>Nom du payeur / enfant <span class="req">*</span></label>
             <input type="text" id="eNom" required placeholder="Tapez pour rechercher..." autocomplete="off">
             <div id="eNomSuggestions" class="card" style="position:absolute; top:100%; left:0; right:0; z-index:20; padding:6px; display:none; max-height:220px; overflow-y:auto;"></div>
+            <div class="field-hint" id="eNomHint"></div>
           </div>
           <div class="field">
             <label>Montant (F CFA) <span class="req">*</span></label>
@@ -266,10 +287,8 @@
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Crèche"> Crèche</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Cantine"> Cantine</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Cantine crèche"> Cantine crèche</label>
-              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Halte-garderie"> Halte-garderie</label>
-              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Journée du samedi"> Journée du samedi</label>
-              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Nuitée"> Nuitée</label>
-              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Goûter"> Goûter</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Halte-Garderie"> Halte-garderie / Samedi / Nuitée</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Goûter & Garderie"> Goûter &amp; Garderie</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Uniformes"> Uniformes</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Fournitures"> Fournitures</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Inscription"> Inscription</label>
@@ -338,6 +357,25 @@
             <label>Montant (F CFA) <span class="req">*</span></label>
             <input type="number" id="sMontant" required min="1" placeholder="Ex. 12000">
           </div>
+
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>Secteur imputé <span class="req">*</span></label>
+            <div class="checkbox-grid" id="sSecteurs">
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Crèche" required> Crèche</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Maternelle"> Maternelle</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Primaire"> Primaire</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Activités parascolaires"> Activités parascolaires</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Fêtes scolaires"> Fêtes scolaires</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Assurance"> Assurance</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="APE"> APE</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Cantine"> Cantine (Petit-déj + Déjeuner)</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Goûter & Garderie"> Goûter &amp; Garderie</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Uniformes"> Uniformes</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Fournitures"> Fournitures</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Administratif / Divers"> Administratif / Divers</label>
+            </div>
+          </div>
+
           <div class="field" style="grid-column: 1 / -1;">
             <label>Note</label>
             <textarea id="sNote" placeholder="Optionnel"></textarea>
@@ -353,7 +391,7 @@
         <div class="card-title">Historique des sorties</div>
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>Date</th><th>Catégorie</th><th>Libellé</th><th>Montant</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Catégorie</th><th>Secteur</th><th>Libellé</th><th>Montant</th><th></th></tr></thead>
             <tbody id="sortiesList"></tbody>
           </table>
         </div>
@@ -401,21 +439,54 @@
       </div>
 
       <div class="card">
+        <div class="card-title"><i class="bi bi-journal-text"></i> Saisir le suivi d'un élève</div>
         <div class="form-grid">
           <div class="field">
-            <label>Enfant <span class="req">*</span></label>
+            <label>Élève <span class="req">*</span></label>
             <select id="nEnfant"></select>
           </div>
           <div class="field">
             <label>Trimestre <span class="req">*</span></label>
             <select id="nTrim">
-              <option value="Trimestre 1">Trimestre 1</option>
-              <option value="Trimestre 2">Trimestre 2</option>
-              <option value="Trimestre 3">Trimestre 3</option>
+              <option value="Trimestre 1">1er Trimestre</option>
+              <option value="Trimestre 2">2e Trimestre</option>
+              <option value="Trimestre 3">3e Trimestre</option>
             </select>
           </div>
         </div>
         <div id="notesForm" class="mt-2"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><i class="bi bi-bar-chart-line-fill"></i> Grilles d'appréciations</div>
+        <div class="grille-appreciation">
+          <div class="grille-item grille-danger"><strong>En difficulté</strong><span>0 à 11,99 / 20</span></div>
+          <div class="grille-item grille-orange"><strong>Passable</strong><span>12 à 13,99 / 20</span></div>
+          <div class="grille-item grille-gold"><strong>Bien</strong><span>14 à 15,99 / 20</span></div>
+          <div class="grille-item grille-green"><strong>Excellent</strong><span>16 et plus / 20</span></div>
+          <div class="grille-item grille-green"><strong>Normal</strong><span>0-1 absence</span></div>
+          <div class="grille-item grille-danger"><strong>Alerte absences</strong><span>2+ absences non justifiées</span></div>
+          <div class="grille-item grille-danger"><strong>Alerte retards</strong><span>2+ retards</span></div>
+        </div>
+      </div>
+
+      <div class="btn-group mb-2">
+        <button class="btn btn-danger" id="btnAlerterDifficulte"><i class="bi bi-emoji-frown-fill"></i> Alerter parents en difficulté</button>
+        <button class="btn btn-success" id="btnAlerterAbsRet"><i class="bi bi-alarm-fill"></i> Alerter absences/retards</button>
+        <button class="btn btn-success" id="btnAlerterComportement"><i class="bi bi-exclamation-triangle-fill"></i> Alerter comportement</button>
+        <button class="btn btn-primary" id="btnBulletinsATous"><i class="bi bi-send-fill"></i> Bulletins à tous</button>
+      </div>
+
+      <div class="metrics-grid" id="notesMetrics"></div>
+
+      <div class="card">
+        <div class="card-title"><i class="bi bi-table"></i> Récapitulatif du trimestre</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Élève</th><th>Section</th><th>Moyenne</th><th>Appréciation</th><th>Absences NJ</th><th>Retards</th><th>Comportement</th><th>Alerte</th><th></th></tr></thead>
+            <tbody id="notesTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -429,6 +500,10 @@
       </div>
 
       <div class="card">
+        <div class="field mb-2">
+          <label>Titre / Objet</label>
+          <input type="text" id="msgTitre" placeholder="Ex. Réunion parents, Fermeture exceptionnelle...">
+        </div>
         <div class="field mb-2">
           <label>Message à envoyer</label>
           <textarea id="msgTexte" rows="5" placeholder="Rédigez votre message ici..."></textarea>
@@ -451,6 +526,16 @@
             <option value="ce2">CE2</option>
             <option value="cm1">CM1</option>
           </select>
+          <select id="msgFiltrePreset">
+            <option value="tous">Tous les parents</option>
+            <option value="impayes">Parents avec impayés</option>
+            <option value="creche">Parents crèche</option>
+            <option value="maternelle">Parents maternelle</option>
+            <option value="primaire">Parents primaire</option>
+          </select>
+        </div>
+        <div class="form-actions mb-2">
+          <button type="button" class="btn btn-whatsapp" id="btnEnvoiGroupe"><i class="bi bi-whatsapp"></i> Envoyer via WhatsApp (envoi groupé)</button>
         </div>
         <div class="msg-list" id="msgList"></div>
       </div>
@@ -478,16 +563,16 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=8"></script>
-<script src="assets/js/db.js?v=8"></script>
-<script src="assets/js/postes.js?v=8"></script>
-<script src="assets/js/whatsapp.js?v=8"></script>
-<script src="assets/js/enfants.js?v=8"></script>
-<script src="assets/js/entrees.js?v=8"></script>
-<script src="assets/js/sorties.js?v=8"></script>
-<script src="assets/js/dashboard.js?v=8"></script>
-<script src="assets/js/bilans.js?v=8"></script>
-<script src="assets/js/notes.js?v=8"></script>
-<script src="assets/js/app.js?v=8"></script>
+<script src="assets/js/config.js?v=12"></script>
+<script src="assets/js/db.js?v=12"></script>
+<script src="assets/js/postes.js?v=12"></script>
+<script src="assets/js/whatsapp.js?v=12"></script>
+<script src="assets/js/enfants.js?v=12"></script>
+<script src="assets/js/entrees.js?v=12"></script>
+<script src="assets/js/sorties.js?v=12"></script>
+<script src="assets/js/dashboard.js?v=12"></script>
+<script src="assets/js/bilans.js?v=12"></script>
+<script src="assets/js/notes.js?v=12"></script>
+<script src="assets/js/app.js?v=12"></script>
 </body>
 </html>

@@ -2,13 +2,6 @@
 // bilans.js — Bilans par secteur + bilan général de l'année
 // ============================================================
 
-var GROUPES_NIVEAU = [
-  { id: "creche",     label: "Crèche",        sects: CRECHE_SECTS },
-  { id: "garderie",   label: "Garderie midi", sects: ["garderie"] },
-  { id: "maternelle", label: "Maternelle",    sects: MAT_SECTS },
-  { id: "primaire",   label: "Primaire",      sects: PRIM_SECTS }
-];
-
 // Couleurs de graphiques validées (contraste + distinction daltonisme) —
 // distinctes des couleurs de badges/texte pour rester lisibles en aplats.
 var CHART_COLORS = {
@@ -31,50 +24,55 @@ var TRANCHES_AGE = [
 // ============================================================
 // ONGLET 5 — BILANS PAR SECTEUR
 // ============================================================
-function renderBilanParNiveau() {
-  return GROUPES_NIVEAU.map(g => {
-    const enfants = STATE.enfants.filter(e => g.sects.includes(e.sect));
-    let du = 0, paye = 0, reste = 0;
-    enfants.forEach(e => {
-      const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
-      du += tDu(postesEnfant);
-      paye += tPaye(postesEnfant);
-      reste += tReste(postesEnfant);
-    });
-    const taux = du > 0 ? Math.round((paye / du) * 100) : 0;
-    return `
-      <div class="card">
-        <div class="card-title">${g.label} <span class="badge badge-navy">${enfants.length} élève${enfants.length > 1 ? "s" : ""}</span></div>
-        <div class="poste-row"><div class="poste-label">Total dû</div><div class="poste-amounts">${fmtFCFA(du)}</div></div>
-        <div class="poste-row"><div class="poste-label">Total payé</div><div class="poste-amounts">${fmtFCFA(paye)}</div></div>
-        <div class="poste-row"><div class="poste-label">Reste à recouvrer</div><div class="poste-amounts"><strong>${fmtFCFA(reste)}</strong></div></div>
-        <div class="poste-row"><div class="poste-label">Taux de recouvrement</div><div class="poste-amounts">${taux}%</div></div>
-      </div>`;
-  }).join("");
-}
 
-function renderBilanParCategorie() {
-  const cats = {};
-  STATE.postes.filter(p => !p.is_remise && p.key !== "avance").forEach(p => {
-    if (!cats[p.cat]) cats[p.cat] = { du: 0, paye: 0 };
-    cats[p.cat].du += p.du || 0;
-    cats[p.cat].paye += p.paye || 0;
-  });
+// Couleur décorative attribuée à chaque carte secteur, dans l'ordre —
+// purement visuelle (distinguer les cartes d'un coup d'œil dans la liste),
+// sans rapport avec les couleurs de statut (soldé/partiel/impayé).
+var BILAN_SECTEUR_COULEURS = ["pink", "navy", "green", "gold", "blue", "orange", "red"];
 
-  const rows = Object.keys(cats).sort().map(cat => {
-    const c = cats[cat];
-    const reste = Math.max(c.du - c.paye, 0);
-    return `<tr><td>${escapeHtml(cat)}</td><td>${fmtFCFA(c.du)}</td><td>${fmtFCFA(c.paye)}</td><td><strong>${fmtFCFA(reste)}</strong></td></tr>`;
-  }).join("");
+// Liste fixe et complète des secteurs — toujours affichés, même à 0 F,
+// pour un bilan lisible d'un coup d'œil. Maternelle et Primaire partagent
+// la même catégorie de poste ("Scolarité") : on les sépare ici en
+// retrouvant la section de l'enfant propriétaire de chaque poste.
+var BILAN_CATEGORIES_FIXES = [
+  { label: "Crèche",                    match: (p, ef) => p.cat === "Crèche" },
+  { label: "Maternelle",                match: (p, ef) => p.cat === "Scolarité" && ef && MAT_SECTS.includes(ef.sect) },
+  { label: "Primaire",                  match: (p, ef) => p.cat === "Scolarité" && ef && PRIM_SECTS.includes(ef.sect) },
+  { label: "Activités parascolaires",   match: (p) => p.cat === "Activités parascolaires" },
+  { label: "Fêtes scolaires",           match: (p) => p.cat === "Fêtes scolaires" },
+  { label: "Assurance",                 match: (p) => p.cat === "Assurance" },
+  { label: "APE",                       match: (p) => p.cat === "APE" },
+  { label: "Cantine",                   match: (p) => p.cat === "Cantine" },
+  { label: "Cantine crèche",            match: (p) => p.cat === "Cantine crèche" },
+  { label: "Goûter & Garderie",         match: (p) => p.cat === "Goûter" || p.cat === "Garderie" },
+  { label: "Uniformes",                 match: (p) => p.cat === "Uniformes" },
+  { label: "Fournitures",               match: (p) => p.cat === "Fournitures" },
+  { label: "Halte-Garderie",            match: (p) => PONCTUEL_CRECHE_CATS.includes(p.cat) }
+];
+
+// Une carte détaillée par secteur : encaissé, total attendu, reste à
+// recouvrer, sorties imputées à ce secteur, taux de recouvrement, et un
+// bandeau "Solde net" (encaissé − sorties) coloré pour repérer la carte
+// d'un coup d'œil dans la liste.
+function renderBilanSecteurCard(label, du, paye, sortiesImputees, couleur) {
+  const reste = Math.max(du - paye, 0);
+  const taux = du > 0 ? Math.round((paye / du) * 100) : 0;
+  const soldeNet = paye - sortiesImputees;
 
   return `
-    <div class="card">
-      <div class="card-title"><i class="bi bi-pie-chart-fill"></i> Répartition par catégorie financière</div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Catégorie</th><th>Dû</th><th>Payé</th><th>Reste</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="4" class="text-center text-muted">Aucune donnée pour le moment.</td></tr>'}</tbody>
-        </table>
+    <div class="card secteur-card">
+      <div class="secteur-card-header">
+        <span class="secteur-card-titre">${escapeHtml(label)}</span>
+        <span class="secteur-card-total text-${couleur}">${fmtFCFA(paye)}</span>
+      </div>
+      <div class="poste-row"><div class="poste-label">Encaissé</div><div class="poste-amounts text-green">${fmtFCFA(paye)}</div></div>
+      <div class="poste-row"><div class="poste-label">Total attendu (familles)</div><div class="poste-amounts text-pink">${fmtFCFA(du)}</div></div>
+      <div class="poste-row"><div class="poste-label">Reste à recouvrer</div><div class="poste-amounts text-orange">${fmtFCFA(reste)}</div></div>
+      <div class="poste-row"><div class="poste-label">Sorties imputées</div><div class="poste-amounts">− ${fmtFCFA(sortiesImputees)}</div></div>
+      <div class="poste-row"><div class="poste-label">Taux de recouvrement</div><div class="poste-amounts">${taux}%</div></div>
+      <div class="secteur-card-solde secteur-solde-${couleur}">
+        <span>Solde net</span>
+        <strong>${fmtFCFA(soldeNet)}</strong>
       </div>
     </div>`;
 }
@@ -82,7 +80,43 @@ function renderBilanParCategorie() {
 function renderBilans() {
   const root = document.getElementById("bilansSecteurs");
   if (!root) return;
-  root.innerHTML = `${renderBilanParNiveau()}${renderBilanParCategorie()}`;
+
+  const enfantParId = {};
+  STATE.enfants.forEach(e => { enfantParId[e.id] = e; });
+
+  const sortiesParSecteur = {};
+  STATE.sorties.forEach(s => {
+    const sect = s.secteur || "Administratif / Divers";
+    sortiesParSecteur[sect] = (sortiesParSecteur[sect] || 0) + (Number(s.mt) || 0);
+  });
+
+  root.innerHTML = BILAN_CATEGORIES_FIXES.map((entry, idx) => {
+    let du = 0, paye = 0;
+    STATE.postes.forEach(p => {
+      if (p.is_remise || p.key === "avance") return;
+      if (entry.match(p, enfantParId[p.enfant_id])) {
+        du += p.du || 0;
+        paye += p.paye || 0;
+      }
+    });
+    const sortiesImputees = sortiesParSecteur[entry.label] || 0;
+    const couleur = BILAN_SECTEUR_COULEURS[idx % BILAN_SECTEUR_COULEURS.length];
+    return renderBilanSecteurCard(entry.label, du, paye, sortiesImputees, couleur);
+  }).join("");
+}
+
+// Recettes déclarées par secteur (d'après le(s) secteur(s) coché(s) sur
+// chaque entrée) — un paiement multi-secteurs compte dans chacun d'eux.
+// Réutilisée par le Bilan général, le mini-bilan des Entrées et le
+// Tableau de bord.
+function calculerRecettesParSecteur() {
+  const recettesParSecteur = {};
+  STATE.entrees.forEach(e => {
+    const secteurs = (e.sect || "").split(",").map(s => s.trim()).filter(Boolean);
+    if (secteurs.length === 0) secteurs.push("Non classé");
+    secteurs.forEach(sect => { recettesParSecteur[sect] = (recettesParSecteur[sect] || 0) + (Number(e.mt) || 0); });
+  });
+  return recettesParSecteur;
 }
 
 // ============================================================
@@ -95,6 +129,7 @@ function renderBilanGeneral() {
   const m = calculerMetriques();
   const totalSorties = STATE.sorties.reduce((s, x) => s + (Number(x.mt) || 0), 0);
   const soldeNet = m.totalEncaisse - totalSorties;
+  const resultatPrevisionnel = soldeNet + m.totalReste;
 
   const modeStats = {};
   STATE.entrees.forEach(e => { modeStats[e.mode] = (modeStats[e.mode] || 0) + (Number(e.mt) || 0); });
@@ -102,21 +137,63 @@ function renderBilanGeneral() {
   const catSorties = {};
   STATE.sorties.forEach(s => { catSorties[s.cat] = (catSorties[s.cat] || 0) + (Number(s.mt) || 0); });
 
+  const recettesParSecteur = calculerRecettesParSecteur();
+
+  // Dépenses par secteur imputé (nouveau champ des Sorties)
+  const depensesParSecteur = {};
+  STATE.sorties.forEach(s => {
+    const sect = s.secteur || "Administratif / Divers";
+    depensesParSecteur[sect] = (depensesParSecteur[sect] || 0) + (Number(s.mt) || 0);
+  });
+
+  // Synthèse par enfant — même logique que l'export CSV, affichée à l'écran
+  const syntheseEnfants = STATE.enfants.slice().sort((a, b) => a.nom.localeCompare(b.nom)).map(e => {
+    const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
+    const du = tDu(postesEnfant), paye = tPaye(postesEnfant), reste = tReste(postesEnfant);
+    const pct = du > 0 ? Math.round((paye / du) * 100) : 0;
+    return { nom: e.nom, sect: SECT_LABELS[e.sect] || e.sect, du, paye, reste, pct, statut: statutPaiement(postesEnfant) };
+  });
+
   root.innerHTML = `
     <div class="metrics-grid">
-      <div class="metric-card metric-green"><div class="metric-label">Total encaissé</div><div class="metric-value">${fmtFCFA(m.totalEncaisse)}</div></div>
-      <div class="metric-card metric-red"><div class="metric-label">Total dépensé</div><div class="metric-value">${fmtFCFA(totalSorties)}</div></div>
-      <div class="metric-card ${soldeNet >= 0 ? "metric-lime" : "metric-red"}"><div class="metric-label">Solde net</div><div class="metric-value">${fmtFCFA(soldeNet)}</div></div>
-      <div class="metric-card metric-gold"><div class="metric-label">Taux de recouvrement</div><div class="metric-value">${m.tauxRecouvrement}%</div></div>
+      <div class="metric-card metric-green"><div class="metric-label">Total entrées caisse</div><div class="metric-value">${fmtFCFA(m.totalEncaisse)}</div></div>
+      <div class="metric-card metric-red"><div class="metric-label">Total dépenses</div><div class="metric-value">${fmtFCFA(totalSorties)}</div></div>
+      <div class="metric-card ${soldeNet >= 0 ? "metric-lime" : "metric-red"}"><div class="metric-label">Résultat net</div><div class="metric-value">${fmtFCFA(soldeNet)}</div></div>
+      <div class="metric-card metric-navy"><div class="metric-label">Perçu (dossiers)</div><div class="metric-value">${fmtFCFA(m.totalPaye)}</div></div>
+      <div class="metric-card metric-gold"><div class="metric-label">Créances familles</div><div class="metric-value">${fmtFCFA(m.totalReste)}</div></div>
+      <div class="metric-card metric-lime"><div class="metric-label">Taux de recouvrement</div><div class="metric-value">${m.tauxRecouvrement}%</div></div>
     </div>
 
     <div class="charts-grid" id="bilanCharts"></div>
 
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-title"><i class="bi bi-graph-up-arrow"></i> Recettes par secteur</div>
+        ${Object.keys(recettesParSecteur).length === 0 ? '<p class="text-muted">Aucune recette pour le moment.</p>' :
+          Object.entries(recettesParSecteur).sort((a, b) => b[1] - a[1]).map(([sect, mt]) => `
+            <div class="poste-row"><div class="poste-label">${escapeHtml(sect)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>`).join("")}
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="bi bi-wallet2"></i> Dépenses par secteur</div>
+        ${Object.keys(depensesParSecteur).length === 0 ? '<p class="text-muted">Aucune dépense enregistrée.</p>' :
+          Object.entries(depensesParSecteur).sort((a, b) => b[1] - a[1]).map(([sect, mt]) => `
+            <div class="poste-row"><div class="poste-label">${escapeHtml(sect)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>`).join("")}
+      </div>
+    </div>
+
     <div class="card">
-      <div class="card-title"><i class="bi bi-people-fill"></i> Effectifs de l'année 2026–2027</div>
-      <div class="poste-row"><div class="poste-label">Total élèves inscrits</div><div class="poste-amounts">${STATE.enfants.length}</div></div>
-      <div class="poste-row"><div class="poste-label">Total dû sur l'année</div><div class="poste-amounts">${fmtFCFA(m.totalDu)}</div></div>
-      <div class="poste-row"><div class="poste-label">Reste à recouvrer</div><div class="poste-amounts"><strong>${fmtFCFA(m.totalReste)}</strong></div></div>
+      <div class="card-title"><i class="bi bi-journal-text"></i> Récapitulatif comptable</div>
+      <div class="poste-row"><div class="poste-label">Total entrées encaissées</div><div class="poste-amounts">${fmtFCFA(m.totalEncaisse)}</div></div>
+      <div class="poste-row"><div class="poste-label">Total dépenses</div><div class="poste-amounts text-red">− ${fmtFCFA(totalSorties)}</div></div>
+      <div class="poste-row" style="background:var(--navy); color:#fff; border-radius:8px; margin-top:6px;">
+        <div class="poste-label" style="color:#fff;"><i class="bi bi-cash-coin"></i> Résultat net</div>
+        <div class="poste-amounts" style="color:#fff;"><strong>${fmtFCFA(soldeNet)}</strong></div>
+      </div>
+      <div class="poste-row"><div class="poste-label">Créances familles (impayés)</div><div class="poste-amounts text-orange">+ ${fmtFCFA(m.totalReste)}</div></div>
+      <div class="poste-row" style="background:var(--pink); color:#fff; border-radius:8px; margin-top:6px;">
+        <div class="poste-label" style="color:#fff;"><i class="bi bi-trophy-fill"></i> Résultat prévisionnel</div>
+        <div class="poste-amounts" style="color:#fff;"><strong>${fmtFCFA(resultatPrevisionnel)}</strong></div>
+      </div>
     </div>
 
     <div class="card">
@@ -127,10 +204,34 @@ function renderBilanGeneral() {
     </div>
 
     <div class="card">
-      <div class="card-title"><i class="bi bi-wallet2"></i> Dépenses par catégorie</div>
-      ${Object.keys(catSorties).length === 0 ? '<p class="text-muted">Aucune dépense enregistrée.</p>' :
-        Object.entries(catSorties).sort((a, b) => b[1] - a[1]).map(([cat, mt]) => `
-          <div class="poste-row"><div class="poste-label">${escapeHtml(cat)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>`).join("")}
+      <div class="card-title"><i class="bi bi-people-fill"></i> Synthèse par enfant</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Enfant</th><th>Section</th><th>Total dû</th><th>Payé</th><th>Reste</th><th>%</th><th>Statut</th></tr></thead>
+          <tbody>
+            ${syntheseEnfants.length === 0 ? '<tr><td colspan="7" class="text-center text-muted">Aucun dossier pour le moment.</td></tr>' :
+              syntheseEnfants.map(x => {
+                const info = STATUT_INFO[x.statut];
+                return `<tr>
+                  <td>${escapeHtml(x.nom)}</td>
+                  <td>${escapeHtml(x.sect)}</td>
+                  <td>${fmtFCFA(x.du)}</td>
+                  <td>${fmtFCFA(x.paye)}</td>
+                  <td>${fmtFCFA(x.reste)}</td>
+                  <td>${x.pct}%</td>
+                  <td><span class="badge ${info.badge}"><i class="bi ${info.icon}"></i> ${info.texte}</span></td>
+                </tr>`;
+              }).join("")}
+            ${syntheseEnfants.length > 0 ? `<tr style="font-weight:800;">
+              <td>Total général</td><td></td>
+              <td>${fmtFCFA(syntheseEnfants.reduce((s,x)=>s+x.du,0))}</td>
+              <td>${fmtFCFA(syntheseEnfants.reduce((s,x)=>s+x.paye,0))}</td>
+              <td>${fmtFCFA(syntheseEnfants.reduce((s,x)=>s+x.reste,0))}</td>
+              <td></td><td></td>
+            </tr>` : ""}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 

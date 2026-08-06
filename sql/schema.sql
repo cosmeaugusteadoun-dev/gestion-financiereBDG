@@ -62,6 +62,7 @@ CREATE TABLE sorties (
   id          TEXT PRIMARY KEY,
   date        DATE NOT NULL,
   cat         TEXT,
+  secteur     TEXT, -- secteur imputé (Crèche, Maternelle, Primaire... ou Administratif/Divers) — utilisé pour les bilans
   label       TEXT,
   mt          NUMERIC NOT NULL,
   note        TEXT,

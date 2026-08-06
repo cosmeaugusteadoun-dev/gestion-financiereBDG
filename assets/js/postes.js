@@ -49,7 +49,7 @@ var SCOL_MAJOREE = ["premat", "cm1"];
 
 // Catégories des services ponctuels de la crèche — regroupées visuellement
 // sous "Crèche" dans le dossier de l'enfant et le bilan WhatsApp.
-var PONCTUEL_CRECHE_CATS = ["Halte-garderie", "Journée du samedi", "Nuitée"];
+var PONCTUEL_CRECHE_CATS = ["Halte-Garderie"];
 
 // ============================================================
 // GÉNÉRATION DES POSTES FINANCIERS
@@ -77,12 +77,14 @@ function buildPostes(sect, stat, opt) {
                  du:13000, paye:0, mois:m });
       });
     }
-    // Services ponctuels de la crèche : tarif journalier, pas de mensualité
-    // fixe — facturés au cas par cas via une entrée libre (montant saisi
-    // manuellement selon le nombre de jours/nuits consommés).
-    if (opt.halte  === "oui") p.push({ key:"halte",  cat:"Halte-garderie",       label:"Halte-garderie (3 000 F / jour)",       du:0, paye:0, is_var:true });
-    if (opt.samedi === "oui") p.push({ key:"samedi", cat:"Journée du samedi",    label:"Journée du samedi (3 500 F / jour)",    du:0, paye:0, is_var:true });
-    if (opt.nuitee === "oui") p.push({ key:"nuitee", cat:"Nuitée",               label:"Nuitée (3 500 F / nuit)",               du:0, paye:0, is_var:true });
+    // Halte-garderie, journée du samedi, nuitée : un seul poste combiné —
+    // tarif journalier, pas de mensualité fixe, facturé au cas par cas via
+    // une entrée libre, quel que soit celui des trois services consommé.
+    if (opt.halte === "oui") {
+      p.push({ key:"halte", cat:"Halte-Garderie",
+               label:"Halte-garderie / Samedi / Nuitée (3 000-3 500 F selon le cas)",
+               du:0, paye:0, is_var:true });
+    }
   }
 
   // ── GARDERIE MIDI (Mat/Prim qui restent le midi) ────────────
@@ -116,7 +118,6 @@ function buildPostes(sect, stat, opt) {
     if (opt.ptdej === "oui") MOIS.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
     if (opt.dej   === "oui") MOIS.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
     if (opt.gout  === "oui") MOIS.forEach(m => p.push({ key:`gout_${m}`,  cat:"Goûter",  label:`Goûter ${m}`,         du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
-    if (opt.gard  === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`,  cat:"Garderie",label:`Garderie midi ${m}`,  du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
   }
 
   // ── PRIMAIRE (CI → CM1) ─────────────────────────────────────
@@ -134,13 +135,23 @@ function buildPostes(sect, stat, opt) {
     // Le goûter est réservé à la Maternelle sur la fiche tarifaire officielle
     if (opt.ptdej === "oui") MOIS.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
     if (opt.dej   === "oui") MOIS.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
-    if (opt.gard  === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`,  cat:"Garderie",label:`Garderie midi ${m}`,  du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
   }
 
-  // ── UNIFORMES (tous niveaux sauf crèche, montant libre — pas de tarif
-  //    fixe sur la fiche officielle, disponibles au secrétariat) ────────
-  if (opt.unif === "oui" && sect !== "creche") {
-    p.push({ key:"unif", cat:"Uniformes", label:"Uniformes (tenue scolaire et sport)", du:0, paye:0, is_var:true });
+  // ── UNIFORMES (tous niveaux sauf crèche) ────────────────────
+  // Tarif fixe à l'unité, mais quantité libre : un ancien élève peut
+  // réutiliser sa tenue de l'an passé (0 acheté), un nouveau peut en
+  // acheter plusieurs — la tenue scolaire et la tenue de sport se
+  // choisissent indépendamment l'une de l'autre.
+  if (sect !== "creche") {
+    const prixTenue = MAT_SECTS.includes(sect) ? 8000 : 9000; // Maternelle : 8 000 F · Primaire/Garderie : 9 000 F
+    const qteTenue = parseInt(opt.qteTenue, 10) || 0;
+    const qteSport = parseInt(opt.qteSport, 10) || 0;
+    if (qteTenue > 0) {
+      p.push({ key:"unif_tenue", cat:"Uniformes", label:`Tenue scolaire ×${qteTenue} (${fmtFCFA(prixTenue)}/unité)`, du:prixTenue * qteTenue, paye:0 });
+    }
+    if (qteSport > 0) {
+      p.push({ key:"unif_sport", cat:"Uniformes", label:`Tenue de sport ×${qteSport} (4 000 F/unité)`, du:4000 * qteSport, paye:0 });
+    }
   }
 
   // ── FOURNITURES (montant libre) ────────────────────────────
@@ -177,12 +188,10 @@ var SECT_TO_CAT = {
   "Crèche":                  ["Crèche"],
   "Cantine":                 ["Cantine"],
   "Cantine crèche":          ["Cantine crèche"],
-  "Goûter":                  ["Goûter"],
+  "Goûter & Garderie":       ["Goûter", "Garderie"],
   "Uniformes":               ["Uniformes"],
   "Fournitures":             ["Fournitures"],
-  "Halte-garderie":          ["Halte-garderie"],
-  "Journée du samedi":       ["Journée du samedi"],
-  "Nuitée":                  ["Nuitée"]
+  "Halte-Garderie":          ["Halte-Garderie"]
 };
 
 // ============================================================

@@ -30,6 +30,7 @@ function initEntrees() {
 // ============================================================
 function handleNomInput() {
   selectedEnfantId = null;
+  reinitialiserFiltreSecteurs();
   const valeur = document.getElementById("eNom").value.trim().toLowerCase();
   const box = document.getElementById("eNomSuggestions");
 
@@ -53,7 +54,42 @@ function handleNomInput() {
       document.getElementById("eNom").value = enfant.nom;
       selectedEnfantId = enfant.id;
       box.style.display = "none";
+      document.getElementById("eNomHint").textContent = `Section : ${SECT_LABELS[enfant.sect] || enfant.sect}`;
+      filtrerSecteursSelonEnfant(enfant);
     });
+  });
+}
+
+// ============================================================
+// FILTRAGE DES SECTEURS SELON LA SECTION DE L'ENFANT SÉLECTIONNÉ
+// Un enfant de la crèche n'a pas de postes "Cantine" (seulement "Cantine
+// crèche") : on grise les secteurs qui ne correspondent à aucun de ses
+// postes réels, pour éviter qu'un paiement parte sur la mauvaise case.
+// ============================================================
+function filtrerSecteursSelonEnfant(enfant) {
+  const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
+  const catsDisponibles = new Set(postesEnfant.map(p => p.cat));
+  const keysDisponibles = new Set(postesEnfant.map(p => p.key));
+
+  document.querySelectorAll("#eSecteurs .checkbox-item").forEach(item => {
+    const input = item.querySelector("input");
+    const label = input.value;
+    let ok;
+    if (SECT_TO_KEY[label]) ok = keysDisponibles.has(SECT_TO_KEY[label]);
+    else if (SECT_TO_CAT[label]) ok = SECT_TO_CAT[label].some(cat => catsDisponibles.has(cat));
+    else ok = true;
+
+    input.disabled = !ok;
+    if (!ok) { input.checked = false; item.classList.remove("checked"); }
+    item.classList.toggle("disabled", !ok);
+  });
+}
+
+function reinitialiserFiltreSecteurs() {
+  document.getElementById("eNomHint").textContent = "";
+  document.querySelectorAll("#eSecteurs .checkbox-item").forEach(item => {
+    item.querySelector("input").disabled = false;
+    item.classList.remove("disabled");
   });
 }
 
@@ -63,6 +99,7 @@ function resetEntreeForm() {
   document.querySelectorAll('input[name="eSect"]').forEach(cb => cb.closest(".checkbox-item").classList.remove("checked"));
   document.getElementById("eNomSuggestions").style.display = "none";
   selectedEnfantId = null;
+  reinitialiserFiltreSecteurs();
 }
 
 // ============================================================
@@ -210,9 +247,34 @@ async function handleCreateEntree(e) {
 // ============================================================
 // RENDU DE L'HISTORIQUE DES ENTRÉES
 // ============================================================
+// Mini-bilan en haut de l'onglet : total encaissé, nombre d'opérations, et
+// les 3 secteurs qui ont le plus rapporté — pour un coup d'œil rapide sans
+// devoir aller sur Bilans secteurs.
+function renderEntreesMetrics() {
+  const root = document.getElementById("entreesMetrics");
+  if (!root) return;
+
+  const total = STATE.entrees.reduce((s, e) => s + (Number(e.mt) || 0), 0);
+  const recettesParSecteur = calculerRecettesParSecteur();
+  const topSecteurs = Object.entries(recettesParSecteur).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  const tuilesSecteurs = topSecteurs.map(([sect, mt], i) => {
+    const couleurs = ["metric-navy", "metric-lime", "metric-gold"];
+    return `<div class="metric-card ${couleurs[i] || "metric-navy"}"><div class="metric-label">${escapeHtml(sect)}</div><div class="metric-value small">${fmtFCFA(mt)}</div></div>`;
+  }).join("");
+
+  root.innerHTML = `
+    <div class="metric-card metric-green"><div class="metric-label">Total entrées</div><div class="metric-value">${fmtFCFA(total)}</div></div>
+    <div class="metric-card metric-navy"><div class="metric-label">Opérations</div><div class="metric-value">${STATE.entrees.length}</div></div>
+    ${tuilesSecteurs}
+  `;
+}
+
 function renderEntreesList() {
   const tbody = document.getElementById("entreesList");
   if (!tbody) return;
+
+  renderEntreesMetrics();
 
   const liste = STATE.entrees.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
 

@@ -4,17 +4,17 @@
 
 // Services disponibles selon la section (filtre dynamique du formulaire)
 var SERVICE_RULES = {
-  creche:   ["cantC", "halte", "samedi", "nuitee"],
-  garderie: ["unif", "four"],
-  premat:   ["ptdej", "dej", "gout", "gard", "unif", "four"],
-  mat1:     ["ptdej", "dej", "gout", "gard", "unif", "four"],
-  mat2:     ["ptdej", "dej", "gout", "gard", "unif", "four"],
+  creche:   ["cantC", "halte"],
+  garderie: ["four"],
+  premat:   ["ptdej", "dej", "gout", "four"],
+  mat1:     ["ptdej", "dej", "gout", "four"],
+  mat2:     ["ptdej", "dej", "gout", "four"],
   // Le goûter est réservé à la Maternelle sur la fiche tarifaire officielle
-  ci:       ["ptdej", "dej", "gard", "unif", "four"],
-  cp:       ["ptdej", "dej", "gard", "unif", "four"],
-  ce1:      ["ptdej", "dej", "gard", "unif", "four"],
-  ce2:      ["ptdej", "dej", "gard", "unif", "four"],
-  cm1:      ["ptdej", "dej", "gard", "unif", "four"]
+  ci:       ["ptdej", "dej", "four"],
+  cp:       ["ptdej", "dej", "four"],
+  ce1:      ["ptdej", "dej", "four"],
+  ce2:      ["ptdej", "dej", "four"],
+  cm1:      ["ptdej", "dej", "four"]
 };
 
 // Enfants dont la fiche est actuellement dépliée (persiste entre les rendus)
@@ -62,6 +62,13 @@ function updateServiceAvailability() {
     }
     item.classList.toggle("disabled", !ok);
   });
+
+  // Uniformes : tarif fixe à la quantité, disponible pour tous les niveaux sauf la crèche
+  const uniformesOk = sect !== "" && sect !== "creche";
+  document.querySelectorAll('[data-svc-group="unif"] input').forEach(input => {
+    input.disabled = !uniformesOk;
+    if (!uniformesOk) input.value = 0;
+  });
 }
 
 function resetEnfantForm() {
@@ -97,13 +104,11 @@ async function handleCreateEnfant(e) {
     ptdej: document.getElementById("svcPtdej").checked ? "oui" : "non",
     dej:   document.getElementById("svcDej").checked ? "oui" : "non",
     gout:  document.getElementById("svcGout").checked ? "oui" : "non",
-    gard:  document.getElementById("svcGard").checked ? "oui" : "non",
-    unif:  document.getElementById("svcUnif").checked ? "oui" : "non",
+    qteTenue: parseInt(document.getElementById("fQteTenue").value, 10) || 0,
+    qteSport: parseInt(document.getElementById("fQteSport").value, 10) || 0,
     four:  document.getElementById("svcFour").checked ? "oui" : "non",
     cantC: document.getElementById("svcCantC").checked ? "oui" : "non",
     halte:    document.getElementById("svcHalte").checked ? "oui" : "non",
-    samedi:   document.getElementById("svcSamedi").checked ? "oui" : "non",
-    nuitee:   document.getElementById("svcNuitee").checked ? "oui" : "non",
     remise: remise > 0 ? remise : 0,
     remiseCible
   };
@@ -223,35 +228,65 @@ function renderEnfantItem(e) {
 
   const remisePoste = postesEnfant.find(p => p.is_remise);
 
+  // Rendu d'une ligne de poste (montant dû + versé/restant, badge retard)
+  function renderPosteRow(label, du, paye, isVar, retard) {
+    const reste = isVar ? Math.max(-(paye || 0), 0) : Math.max((du || 0) - (paye || 0), 0);
+    const duTxt = isVar ? "Montant libre" : fmtFCFA(du);
+
+    // Transparence totale : dès qu'un poste n'est pas soldé, on affiche à la
+    // fois ce qui a déjà été versé (en bleu) et ce qu'il reste (en rouge/orange)
+    // — jamais le reste seul, ni les deux dans la même couleur : ça se confond.
+    let statutHtml;
+    if (isVar) {
+      statutHtml = `<span class="text-blue">${fmtFCFA(paye)} versé</span>`;
+    } else if (reste <= 0) {
+      statutHtml = `<span class="text-green">Soldé</span>`;
+    } else {
+      const resteClass = retard ? "text-red" : "text-orange";
+      statutHtml = `<span class="text-blue">Versé ${fmtFCFA(paye || 0)}</span> · <span class="${resteClass}">Restant ${fmtFCFA(reste)}</span>`;
+    }
+
+    return `
+      <div class="poste-row">
+        <div class="poste-label">${escapeHtml(label)}${retard ? ' <span class="badge badge-red">retard</span>' : ""}</div>
+        <div class="poste-amounts">
+          <span class="du">${duTxt}</span>
+          <span class="reste">${statutHtml}</span>
+        </div>
+      </div>`;
+  }
+
+  const MOIS_ORDRE_AFFICHAGE = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
+
   const catsHtml = Object.keys(categories).map(cat => {
-    const lignes = categories[cat].map(p => {
-      const reste = p.is_var ? Math.max(-(p.paye || 0), 0) : Math.max((p.du || 0) - (p.paye || 0), 0);
-      const retard = posteEnRetard(p);
-      const resteClass = reste <= 0 ? "text-green" : (retard ? "text-red" : "text-orange");
-      const duTxt = p.is_var ? "Montant libre" : fmtFCFA(p.du);
+    let lignes;
 
-      // Transparence totale : dès qu'un poste n'est pas soldé, on affiche à
-      // la fois ce qui a déjà été versé et ce qu'il reste à payer — jamais
-      // le reste seul, qui pourrait laisser croire qu'aucun versement n'a
-      // été fait.
-      let statutTxt;
-      if (p.is_var) {
-        statutTxt = `${fmtFCFA(p.paye)} versé`;
-      } else if (reste <= 0) {
-        statutTxt = "Soldé";
-      } else {
-        statutTxt = `Versé ${fmtFCFA(p.paye || 0)} · Restant ${fmtFCFA(reste)}`;
-      }
+    if (cat === "Cantine") {
+      // Regroupe Petit-déjeuner + Déjeuner (et toute autre option cantine)
+      // en un seul total mensuel, plus lisible que le détail poste par poste.
+      // Les postes sans mois (ex. une avance mal orientée) restent affichés
+      // individuellement plutôt que d'être regroupés sous un mois "null".
+      const parMois = {};
+      const horsMois = [];
+      categories[cat].forEach(p => {
+        if (!p.mois) { horsMois.push(p); return; }
+        if (!parMois[p.mois]) parMois[p.mois] = { du: 0, paye: 0, postes: [] };
+        parMois[p.mois].du += p.du || 0;
+        parMois[p.mois].paye += p.paye || 0;
+        parMois[p.mois].postes.push(p);
+      });
+      lignes = Object.keys(parMois)
+        .sort((a, b) => MOIS_ORDRE_AFFICHAGE.indexOf(a) - MOIS_ORDRE_AFFICHAGE.indexOf(b))
+        .map(mois => {
+          const g = parMois[mois];
+          const retard = g.postes.some(p => posteEnRetard(p));
+          return renderPosteRow(`Cantine ${mois}`, g.du, g.paye, false, retard);
+        }).join("")
+        + horsMois.map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p))).join("");
+    } else {
+      lignes = categories[cat].map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p))).join("");
+    }
 
-      return `
-        <div class="poste-row">
-          <div class="poste-label">${escapeHtml(p.label)}${retard ? ' <span class="badge badge-red">retard</span>' : ""}</div>
-          <div class="poste-amounts">
-            <span class="du">${duTxt}</span>
-            <span class="reste ${resteClass}">${statutTxt}</span>
-          </div>
-        </div>`;
-    }).join("");
     return `<div class="postes-cat"><div class="postes-cat-title">${escapeHtml(cat)}</div>${lignes}</div>`;
   }).join("");
 
@@ -314,8 +349,17 @@ function wireEnfantItemEvents() {
     el.addEventListener("click", () => {
       const id = el.dataset.toggle;
       const item = document.getElementById(`enfant-${id}`);
-      if (openIds.has(id)) { openIds.delete(id); item.classList.remove("open"); }
-      else { openIds.add(id); item.classList.add("open"); }
+      const dejaOuvert = openIds.has(id);
+
+      // Un seul dossier ouvert à la fois : on referme systématiquement
+      // les autres avant d'ouvrir celui qui vient d'être cliqué.
+      document.querySelectorAll(".enfant-item.open").forEach(autre => autre.classList.remove("open"));
+      openIds.clear();
+
+      if (!dejaOuvert) {
+        openIds.add(id);
+        item.classList.add("open");
+      }
     });
   });
 
@@ -348,13 +392,9 @@ function openEditOptionsModal(enfantId) {
     { key: "ptdej",   label: "Petit-déjeuner" },
     { key: "dej",     label: "Déjeuner" },
     { key: "gout",    label: "Goûter" },
-    { key: "gard",    label: "Garderie midi" },
-    { key: "unif",    label: "Uniformes (montant libre)" },
     { key: "four",    label: "Fournitures (montant libre)" },
     { key: "cantC",   label: "Cantine crèche" },
-    { key: "halte",   label: "Halte-garderie (3 000 F/jour)" },
-    { key: "samedi",  label: "Journée du samedi (3 500 F/jour)" },
-    { key: "nuitee",  label: "Nuitée (3 500 F/nuit)" }
+    { key: "halte",   label: "Halte-garderie / Samedi / Nuitée" }
   ].filter(s => allowed.includes(s.key));
 
   const checkboxesHtml = services.map(s => `
@@ -363,10 +403,26 @@ function openEditOptionsModal(enfantId) {
       ${s.label}
     </label>`).join("");
 
+  const uniformesOk = enfant.sect !== "creche";
+  const prixTenueInfo = MAT_SECTS.includes(enfant.sect) ? "8 000 F/unité" : "9 000 F/unité";
+
   openModal(`
     <div class="modal-title">Modifier les options — ${escapeHtml(enfant.nom)}</div>
     <div class="modal-text">Les paiements déjà enregistrés sont conservés même si un service est désactivé.</div>
     <div class="checkbox-grid">${checkboxesHtml || '<p class="text-muted">Aucun service optionnel pour cette section.</p>'}</div>
+    ${uniformesOk ? `
+    <div class="form-grid mt-2">
+      <div class="field">
+        <label>Tenues scolaires — nombre</label>
+        <input type="number" id="editQteTenue" min="0" step="1" value="${opt.qteTenue || 0}">
+        <div class="field-hint">${prixTenueInfo}</div>
+      </div>
+      <div class="field">
+        <label>Tenues de sport — nombre</label>
+        <input type="number" id="editQteSport" min="0" step="1" value="${opt.qteSport || 0}">
+        <div class="field-hint">4 000 F/unité</div>
+      </div>
+    </div>` : ""}
     <div class="form-grid mt-2">
       <div class="field">
         <label>Remise accordée (F CFA)</label>
@@ -397,6 +453,13 @@ function openEditOptionsModal(enfantId) {
       const cb = document.querySelector(`[data-svc-edit="${s.key}"]`);
       newOpt[s.key] = cb.checked ? "oui" : "non";
     });
+    if (uniformesOk) {
+      newOpt.qteTenue = parseInt(document.getElementById("editQteTenue").value, 10) || 0;
+      newOpt.qteSport = parseInt(document.getElementById("editQteSport").value, 10) || 0;
+    } else {
+      newOpt.qteTenue = 0;
+      newOpt.qteSport = 0;
+    }
     const remise = parseFloat(document.getElementById("editRemise").value) || 0;
     const remiseCible = document.getElementById("editRemiseCible").value;
     newOpt.remise = remise > 0 ? remise : 0;

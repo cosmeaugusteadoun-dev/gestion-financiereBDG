@@ -44,6 +44,8 @@ function renderDashboard() {
 
   renderChartsBloc("dashCharts");
   renderAlertesRetard();
+  renderRecettesSecteurDashboard();
+  renderParentsARelancer();
   renderAnniversaires();
   renderDerniersPaiements();
 }
@@ -154,4 +156,67 @@ function renderDerniersPaiements() {
       <span>${escapeHtml(en.nom)} · ${escapeHtml(en.sect || "—")}</span>
       <span class="timeline-mt">${fmtFCFA(en.mt)}</span>
     </div>`).join("")}</div>`;
+}
+
+// ============================================================
+// RECETTES PAR SECTEUR (résumé, réutilise bilans.js)
+// ============================================================
+function renderRecettesSecteurDashboard() {
+  const root = document.getElementById("dashRecettesSecteur");
+  if (!root) return;
+
+  const recettesParSecteur = calculerRecettesParSecteur();
+  const entrees = Object.entries(recettesParSecteur).sort((a, b) => b[1] - a[1]);
+
+  if (entrees.length === 0) {
+    root.innerHTML = `<p class="text-muted">Aucune recette pour le moment.</p>`;
+    return;
+  }
+
+  root.innerHTML = entrees.map(([sect, mt]) => `
+    <div class="poste-row"><div class="poste-label">${escapeHtml(sect)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>
+  `).join("");
+}
+
+// ============================================================
+// PARENTS À RELANCER — dossiers avec un reste à payer, triés par
+// montant décroissant, avec accès direct à WhatsApp
+// ============================================================
+function renderParentsARelancer() {
+  const root = document.getElementById("dashParentsRelancer");
+  if (!root) return;
+
+  const aRelancer = STATE.enfants.map(e => {
+    const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
+    return { enfant: e, reste: tReste(postesEnfant), statut: statutPaiement(postesEnfant) };
+  }).filter(x => x.statut !== "solde").sort((a, b) => b.reste - a.reste);
+
+  if (aRelancer.length === 0) {
+    root.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Aucun parent à relancer pour le moment.</div>`;
+    return;
+  }
+
+  const AFFICHES = 4;
+  const visibles = aRelancer.slice(0, AFFICHES);
+
+  root.innerHTML = visibles.map(x => `
+    <div class="bday-row">
+      <div>
+        <div class="bday-name">${escapeHtml(x.enfant.nom)} <span class="text-muted">— ${SECT_LABELS[x.enfant.sect] || x.enfant.sect}</span></div>
+        <div class="bday-date">Reste : ${fmtFCFA(x.reste)}${x.enfant.tel ? " · " + escapeHtml(x.enfant.tel) : ""}</div>
+      </div>
+      <button class="btn btn-whatsapp btn-sm" data-relance="${x.enfant.id}" ${x.enfant.tel ? "" : "disabled"} title="Envoyer le bilan"><i class="bi bi-whatsapp"></i></button>
+    </div>`).join("")
+    + (aRelancer.length > AFFICHES ? `<button class="btn btn-ghost btn-block mt-1" id="btnVoirToutRelance">Voir tout (${aRelancer.length})</button>` : "");
+
+  root.querySelectorAll("[data-relance]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const enfant = STATE.enfants.find(e => e.id === btn.dataset.relance);
+      const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
+      const suiviEnfant = STATE.suivi.filter(s => s.enfant_id === enfant.id);
+      sendWhatsApp(enfant.tel, buildBilanMessage(enfant, postesEnfant, suiviEnfant));
+    });
+  });
+
+  document.getElementById("btnVoirToutRelance")?.addEventListener("click", () => switchTab("enfants"));
 }
