@@ -3,6 +3,7 @@
 // ============================================================
 
 var selectedEnfantId = null;
+var TRANCHE_LABELS_ENTREE = { t1: "1ère tranche", t2: "2ème tranche", t3: "3ème tranche" };
 
 // ============================================================
 // INITIALISATION DU MODULE
@@ -103,6 +104,46 @@ function resetEntreeForm() {
 }
 
 // ============================================================
+// IMPUTATION D'UN PAIEMENT CIBLÉ SUR UNE TRANCHE DE SCOLARITÉ
+// Contrairement à la règle générale du "premier poste non soldé", un
+// paiement par tranche crédite directement la tranche demandée. Le
+// surplus éventuel ne progresse que vers la tranche SUIVANTE (jamais en
+// arrière vers une tranche déjà passée) — puis vers l'avance si les 3
+// tranches sont soldées.
+// ============================================================
+function imputerPaiementTranche(postes, montant, trancheDepart) {
+  const ORDRE_TRANCHES = ["t1", "t2", "t3"];
+  const idxDepart = ORDRE_TRANCHES.indexOf(trancheDepart);
+  const allocations = [];
+  let reste = montant;
+
+  ORDRE_TRANCHES.forEach((key, i) => {
+    if (i < idxDepart || reste <= 0) return;
+    const poste = postes.find(p => p.key === key && p.cat === "Scolarité");
+    if (!poste) return;
+    const manque = Math.max((poste.du || 0) - (poste.paye || 0), 0);
+    const versement = Math.min(reste, manque);
+    if (versement > 0) {
+      poste.paye = (poste.paye || 0) + versement;
+      allocations.push({ poste, montant: versement });
+      reste -= versement;
+    }
+  });
+
+  if (reste > 0) {
+    let avance = postes.find(p => p.key === "avance" && p.cat === "Scolarité");
+    if (!avance) {
+      avance = { key: "avance", cat: "Scolarité", label: "Avance / Trop-perçu", du: 0, paye: 0 };
+      postes.push(avance);
+    }
+    avance.paye = (avance.paye || 0) + reste;
+    allocations.push({ poste: avance, montant: reste });
+  }
+
+  return allocations;
+}
+
+// ============================================================
 // IMPUTATION D'UN PAIEMENT SUR PLUSIEURS SECTEURS
 // Répartit le montant, secteur par secteur, en s'appuyant sur
 // imputerPaiement() (postes.js) pour la règle du mois consécutif.
@@ -140,6 +181,15 @@ function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart)
         if (posteVar) {
           posteVar.paye = (posteVar.paye || 0) + reste;
           allocations.push({ poste: posteVar, montant: reste });
+          reste = 0;
+          return;
+        }
+
+        // Paiement ciblé sur une tranche précise (Scolarité) : on court-
+        // circuite la règle générale pour créditer directement la tranche
+        // demandée, sans toucher à l'inscription ni aux frais généraux.
+        if (cat === "Scolarité" && ["t1", "t2", "t3"].includes(moisDepart)) {
+          allocations.push(...imputerPaiementTranche(postes, reste, moisDepart));
           reste = 0;
           return;
         }
@@ -203,12 +253,27 @@ async function handleCreateEntree(e) {
     allocations: []
   };
 
+  let detailCible = "";
+
   try {
     let postesEnfant = [];
 
     if (enfant) {
       postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
       const allocations = imputerPaiementMultiSecteur(postesEnfant, secteurs, montant, moisDepart);
+
+      // Notifie le versé/restant de l'échéance ciblée (mois ou tranche) —
+      // utile surtout quand le paiement ne la solde pas entièrement.
+      if (moisDepart) {
+        const posteCible = postesEnfant.find(p => (p.mois === moisDepart || p.key === moisDepart) && !p.is_var && !p.is_remise);
+        if (posteCible) {
+          const resteCible = Math.max((posteCible.du || 0) - (posteCible.paye || 0), 0);
+          const labelCible = TRANCHE_LABELS_ENTREE[moisDepart] || moisDepart;
+          detailCible = resteCible > 0
+            ? ` ${labelCible} : versé ${fmtFCFA(posteCible.paye)}, restant à solder ${fmtFCFA(resteCible)}.`
+            : ` ${labelCible} entièrement soldée.`;
+        }
+      }
 
       // Les nouveaux postes "Avance" créés pendant l'imputation n'ont pas
       // encore d'identifiant : on les rattache avant de les persister
@@ -237,7 +302,7 @@ async function handleCreateEntree(e) {
 
     resetEntreeForm();
     refreshAllTabs();
-    showToast(`Paiement de ${fmtFCFA(montant)} enregistré avec succès.`, "success");
+    showToast(`Paiement de ${fmtFCFA(montant)} enregistré avec succès.${detailCible}`, "success");
   } catch (err) {
     console.error(err);
     showToast("Erreur lors de l'enregistrement du paiement : " + err.message, "error");
@@ -288,7 +353,7 @@ function renderEntreesList() {
       <td>${formatDateFR(en.date)}</td>
       <td>${escapeHtml(en.nom)}</td>
       <td>${escapeHtml(en.sect || "—")}</td>
-      <td>${en.mois || "—"}</td>
+      <td>${TRANCHE_LABELS_ENTREE[en.mois] || en.mois || "—"}</td>
       <td><strong>${fmtFCFA(en.mt)}</strong></td>
       <td>${escapeHtml(en.mode)}</td>
       <td><button class="btn btn-danger btn-sm" data-del-entree="${en.id}" title="Supprimer"><i class="bi bi-trash"></i></button></td>

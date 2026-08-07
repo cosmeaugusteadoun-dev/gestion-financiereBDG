@@ -4,7 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Les Bulles de Joie — Gestion</title>
-<link rel="icon" href="assets/img/logo.jpg" type="image/jpeg">
+<link rel="icon" href="assets/img/logo.webp" type="image/webp">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#E5007D">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Bulles de Joie">
+<link rel="apple-touch-icon" href="assets/img/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
@@ -18,7 +25,7 @@
   <!-- ============ EN-TÊTE ============ -->
   <header class="topbar">
     <div class="topbar-brand">
-      <div class="topbar-logo"><img src="assets/img/logo.jpg" alt="Logo" onerror="this.style.display='none'"></div>
+      <div class="topbar-logo"><img src="assets/img/logo.webp" alt="Logo" onerror="this.style.display='none'"></div>
       <div>
         <div class="topbar-title">Les Bulles de Joie</div>
         <div class="topbar-sub">Année 2026–2027</div>
@@ -272,6 +279,11 @@
               <option>Sep</option><option>Oct</option><option>Nov</option><option>Déc</option>
               <option>Jan</option><option>Fév</option><option>Mar</option><option>Avr</option>
               <option>Mai</option><option>Jun</option><option>Jul</option><option>Aoû</option>
+              <optgroup label="Tranches (pour les élèves de maternelle et primaire)">
+                <option value="t1">1ère tranche</option>
+                <option value="t2">2ème tranche</option>
+                <option value="t3">3ème tranche</option>
+              </optgroup>
             </select>
           </div>
           <div class="field">
@@ -475,6 +487,7 @@
         <button class="btn btn-success" id="btnAlerterAbsRet"><i class="bi bi-alarm-fill"></i> Alerter absences/retards</button>
         <button class="btn btn-success" id="btnAlerterComportement"><i class="bi bi-exclamation-triangle-fill"></i> Alerter comportement</button>
         <button class="btn btn-primary" id="btnBulletinsATous"><i class="bi bi-send-fill"></i> Bulletins à tous</button>
+        <button class="btn btn-ghost" id="btnBulletinsAnnuelsATous"><i class="bi bi-journal-check"></i> Bulletins annuels à tous</button>
       </div>
 
       <div class="metrics-grid" id="notesMetrics"></div>
@@ -563,16 +576,24 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=12"></script>
-<script src="assets/js/db.js?v=12"></script>
-<script src="assets/js/postes.js?v=12"></script>
-<script src="assets/js/whatsapp.js?v=12"></script>
-<script src="assets/js/enfants.js?v=12"></script>
-<script src="assets/js/entrees.js?v=12"></script>
-<script src="assets/js/sorties.js?v=12"></script>
-<script src="assets/js/dashboard.js?v=12"></script>
-<script src="assets/js/bilans.js?v=12"></script>
-<script src="assets/js/notes.js?v=12"></script>
-<script src="assets/js/app.js?v=12"></script>
+<script src="assets/js/config.js?v=13"></script>
+<script src="assets/js/db.js?v=13"></script>
+<script src="assets/js/postes.js?v=13"></script>
+<script src="assets/js/whatsapp.js?v=13"></script>
+<script src="assets/js/enfants.js?v=13"></script>
+<script src="assets/js/entrees.js?v=13"></script>
+<script src="assets/js/sorties.js?v=13"></script>
+<script src="assets/js/dashboard.js?v=13"></script>
+<script src="assets/js/bilans.js?v=13"></script>
+<script src="assets/js/notes.js?v=13"></script>
+<script src="assets/js/app.js?v=13"></script>
+<script>
+  // Enregistrement du service worker (installation PWA + usage hors-ligne)
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(err => console.error("Échec d'enregistrement du service worker :", err));
+    });
+  }
+</script>
 </body>
 </html>

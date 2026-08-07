@@ -74,10 +74,17 @@ var ORDRE_CATEGORIES_BILAN = [
   "Fêtes scolaires", "Assurance", "APE", "Cantine", "Goûter", "Garderie"
 ];
 
-// Catégories facturées mois par mois : on détaille les mois non soldés
-// sous le total, pour que le parent sache précisément lesquels régler.
-var CATS_MENSUELLES_BILAN = ["Crèche", "Cantine crèche", "Cantine"];
+// Catégories facturées par échéance individuelle (mois ou tranche) : on
+// n'affiche jamais un total annuel qui mélangerait passé et à venir —
+// uniquement chaque échéance non soldée, une par une.
+var CATS_DETAILLEES_BILAN = ["Crèche", "Cantine crèche", "Cantine", "Scolarité"];
 var MOIS_ORDRE_BILAN = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
+var LIBELLES_COURTS_POSTE = { inscr: "Inscription", assur: "Assurance", t1: "Tranche 1", t2: "Tranche 2", t3: "Tranche 3" };
+
+function sousLibellePoste(p) {
+  if (p.mois) return p.mois;
+  return LIBELLES_COURTS_POSTE[p.key] || p.label;
+}
 
 function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
   const parent = enfant.parent || "cher parent";
@@ -92,33 +99,44 @@ function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
   msg += `Voici le détail de votre situation au ${aujourdHui} :\n\n`;
 
   let totalReste = 0;
+  let aDesFraisScolarite = false;
 
   ORDRE_CATEGORIES_BILAN.forEach(cat => {
     const lignes = postesEnfant.filter(p => p.cat === cat && !p.is_var && !p.is_remise && p.key !== "avance");
     if (lignes.length === 0) return;
+    if (cat === "Scolarité") aDesFraisScolarite = true;
 
-    const du = lignes.reduce((s, p) => s + (p.du || 0), 0);
-    const paye = lignes.reduce((s, p) => s + (p.paye || 0), 0);
-    const reste = Math.max(du - paye, 0);
-    totalReste += reste;
-
-    msg += `• *${cat}*\n`;
-    msg += `  Montant dû    : ${fmtFCFA(du)}\n`;
-    msg += `  Déjà payé     : ${fmtFCFA(paye)}\n`;
-    msg += `  Reste à payer : *${fmtFCFA(reste)}*\n`;
-
-    if (CATS_MENSUELLES_BILAN.includes(cat)) {
-      const moisNonSoldes = lignes
-        .filter(p => p.mois && (p.paye || 0) < (p.du || 0))
-        .sort((a, b) => MOIS_ORDRE_BILAN.indexOf(a.mois) - MOIS_ORDRE_BILAN.indexOf(b.mois));
-      if (moisNonSoldes.length > 0) {
-        msg += `  Détail mensuel :\n`;
-        moisNonSoldes.forEach(p => {
-          msg += `    · ${p.mois} : ${fmtFCFA(Math.max((p.du || 0) - (p.paye || 0), 0))} restant\n`;
+    if (CATS_DETAILLEES_BILAN.includes(cat)) {
+      // Une ligne par échéance non soldée (mois ou tranche) — jamais de
+      // total annuel qui donnerait une impression de dette écrasante.
+      const nonSoldes = lignes
+        .filter(p => (p.paye || 0) < (p.du || 0))
+        .sort((a, b) => {
+          const am = a.mois ? MOIS_ORDRE_BILAN.indexOf(a.mois) : -1;
+          const bm = b.mois ? MOIS_ORDRE_BILAN.indexOf(b.mois) : -1;
+          return am - bm;
         });
-      }
+      nonSoldes.forEach(p => {
+        const du = p.du || 0;
+        const paye = p.paye || 0;
+        const reste = Math.max(du - paye, 0);
+        totalReste += reste;
+        msg += `• *${cat} - ${sousLibellePoste(p)}*\n`;
+        msg += `  Montant dû    : ${fmtFCFA(du)}\n`;
+        msg += `  Déjà payé     : ${fmtFCFA(paye)}\n`;
+        msg += `  Reste à payer : *${fmtFCFA(reste)}*\n\n`;
+      });
+    } else {
+      const du = lignes.reduce((s, p) => s + (p.du || 0), 0);
+      const paye = lignes.reduce((s, p) => s + (p.paye || 0), 0);
+      const reste = Math.max(du - paye, 0);
+      if (reste <= 0) return; // déjà soldé : pas de ligne à afficher
+      totalReste += reste;
+      msg += `• *${cat}*\n`;
+      msg += `  Montant dû    : ${fmtFCFA(du)}\n`;
+      msg += `  Déjà payé     : ${fmtFCFA(paye)}\n`;
+      msg += `  Reste à payer : *${fmtFCFA(reste)}*\n\n`;
     }
-    msg += `\n`;
   });
 
   // Remise éventuelle
@@ -130,6 +148,15 @@ function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
 
   msg += `${DIV}\n`;
   msg += `*TOTAL RESTANT : ${fmtFCFA(totalReste)}*\n\n`;
+
+  // Rappel des échéances de tranches — uniquement pour Maternelle/Primaire
+  if (aDesFraisScolarite) {
+    msg += `📅 *Échéances des tranches de scolarité*\n`;
+    msg += `1ère tranche : au plus tard le 19 Octobre\n`;
+    msg += `2ème tranche : au plus tard le 07 Décembre\n`;
+    msg += `3ème tranche : au plus tard le 05 Février\n\n`;
+  }
+
   msg += `Merci de régulariser votre situation avant les échéances indiquées.\n\n`;
   msg += `${DIV}\n`;
   msg += `💛🌸 Adorables parents, vous êtes nos meilleurs partenaires !\n`;

@@ -4,7 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Les Bulles de Joie — Connexion</title>
-<link rel="icon" href="assets/img/logo.jpg" type="image/jpeg">
+<link rel="icon" href="assets/img/logo.webp" type="image/webp">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#E5007D">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Bulles de Joie">
+<link rel="apple-touch-icon" href="assets/img/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
@@ -15,7 +22,7 @@
 
   <div class="login-card">
     <div class="login-logo">
-      <img src="assets/img/logo.jpg" alt="Logo Les Bulles de Joie" onerror="this.style.display='none'">
+      <img src="assets/img/logo.webp" alt="Logo Les Bulles de Joie" onerror="this.style.display='none'">
     </div>
     <h1 class="login-title">Les Bulles de Joie</h1>
     <p class="login-subtitle">CSP Bilingue · Zongo 2, Parakou</p>
@@ -40,7 +47,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js?v=12"></script>
+  <script src="assets/js/config.js?v=13"></script>
   <script>
     // ============================================================
     // Authentification de l'écran de connexion
@@ -181,6 +188,13 @@
         }
       }
     });
+
+    // Enregistrement du service worker (installation PWA + usage hors-ligne)
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(err => console.error("Échec d'enregistrement du service worker :", err));
+      });
+    }
   </script>
 </body>
 </html>

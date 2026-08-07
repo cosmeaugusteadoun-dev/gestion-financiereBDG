@@ -279,17 +279,32 @@ function dlPassed(dl) {
   return new Date() > new Date(annee, mois - 1, jour);
 }
 
+// Seuils d'alerte de retard — distincts des échéances indiquées aux
+// parents (voir le rappel de tranches dans le bilan WhatsApp) : chaque
+// seuil correspond au lendemain de l'échéance (délai de tolérance d'un
+// jour), sauf la T3 qui bénéficie de 5 jours de tolérance.
+var SEUIL_RETARD_FRAIS_GENERAUX = new Date(2026, 8, 16);  // 16/09/2026
+var SEUIL_RETARD_T1 = new Date(2026, 9, 20);               // 20/10/2026
+var SEUIL_RETARD_T2 = new Date(2026, 11, 8);                // 08/12/2026
+var SEUIL_RETARD_T3 = new Date(2027, 1, 10);                 // 10/02/2027
+
 function posteEnRetard(p) {
   if (!p || p.is_var || p.is_remise) return false;
   if ((p.paye || 0) >= p.du) return false;
 
   const today = new Date();
-  const grace = new Date(2026, 8, 21); // 7 jours de grâce après la rentrée (14/09/2026)
 
-  if (["inscr", "act", "assur", "ape"].includes(p.key)) {
-    return today > grace;
+  // Frais généraux (Inscription, Activités parascolaires, Fêtes scolaires,
+  // Assurance, APE) : retard s'ils ne sont pas soldés avant le 16 septembre.
+  if (["inscr", "act", "fetes", "assur", "ape"].includes(p.key)) {
+    return today >= SEUIL_RETARD_FRAIS_GENERAUX;
   }
-  if (["t1", "t2", "t3"].includes(p.key)) return p.dl ? dlPassed(p.dl) : false;
+  if (p.key === "t1") return today >= SEUIL_RETARD_T1;
+  if (p.key === "t2") return today >= SEUIL_RETARD_T2;
+  if (p.key === "t3") return today >= SEUIL_RETARD_T3;
+
+  // Postes mensuels (Crèche, Cantine, Cantine crèche, Goûter, Garderie) :
+  // retard dès le jour de l'échéance (le 5 de chaque mois).
   return p.dl ? dlPassed(p.dl) : false;
 }
 
