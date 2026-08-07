@@ -6,7 +6,7 @@
 // à chaque changement de fichier pour éviter de servir une version périmée
 // (même piège de cache agressif déjà rencontré côté navigateur).
 // ============================================================
-var CACHE_NAME = "bulles-de-joie-v13";
+var CACHE_NAME = "bulles-de-joie-v15";
 
 var APP_SHELL = [
   "index.html",
@@ -24,6 +24,7 @@ var APP_SHELL = [
   "assets/js/bilans.js",
   "assets/js/notes.js",
   "assets/js/app.js",
+  "assets/js/pwa-install.js",
   "assets/img/logo.webp",
   "assets/img/icons/icon-192.png",
   "assets/img/icons/icon-512.png",
