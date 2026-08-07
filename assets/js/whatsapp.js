@@ -71,7 +71,7 @@ function buildReceiptMessage(enfant, entree, postesEnfant, secteurs) {
 // n'y figurent jamais — ce ne sont pas des échéances à régulariser.
 var ORDRE_CATEGORIES_BILAN = [
   "Cantine crèche", "Crèche", "Scolarité", "Activités parascolaires",
-  "Fêtes scolaires", "Assurance", "APE", "Cantine", "Goûter", "Garderie"
+  "Fêtes scolaires", "Assurance", "APE", "Cantine", "Garderie"
 ];
 
 var MOIS_ORDRE_BILAN = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
@@ -83,7 +83,7 @@ var CAT_EMOJI_BILAN = {
   "Cantine crèche": "🍼", "Crèche": "👶", "Scolarité": "🎒",
   "Activités parascolaires": "🎨", "Fêtes scolaires": "🎉",
   "Assurance": "🛡️", "APE": "🤝", "Cantine": "🍽️",
-  "Goûter": "🍪", "Garderie": "🕒"
+  "Garderie": "🕒"
 };
 
 // Bilan financier envoyé aux parents : on mentionne d'abord ce qui est déjà

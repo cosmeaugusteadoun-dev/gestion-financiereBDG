@@ -113,7 +113,6 @@
             <select id="fSect" required>
               <option value="">— Choisir —</option>
               <option value="creche">Crèche</option>
-              <option value="garderie">Garderie midi</option>
               <option value="premat">Prématernelle</option>
               <option value="mat1">Maternelle 1</option>
               <option value="mat2">Maternelle 2</option>
@@ -215,7 +214,6 @@
         <select id="filtreSect">
           <option value="">Toutes les sections</option>
           <option value="creche">Crèche</option>
-          <option value="garderie">Garderie midi</option>
           <option value="premat">Prématernelle</option>
           <option value="mat1">Maternelle 1</option>
           <option value="mat2">Maternelle 2</option>
@@ -297,10 +295,10 @@
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Scolarité Maternelle"> Scolarité Maternelle</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Scolarité Primaire"> Scolarité Primaire</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Crèche"> Crèche</label>
-              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Cantine"> Cantine</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Cantine"> Cantine (Petit-déj + Déjeuner + Goûter Maternelle)</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Cantine crèche"> Cantine crèche</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Halte-Garderie"> Halte-garderie / Samedi / Nuitée</label>
-              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Goûter & Garderie"> Goûter &amp; Garderie</label>
+              <label class="checkbox-item"><input type="checkbox" name="eSect" value="Garderie"> Garderie</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Uniformes"> Uniformes</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Fournitures"> Fournitures</label>
               <label class="checkbox-item"><input type="checkbox" name="eSect" value="Inscription"> Inscription</label>
@@ -380,9 +378,9 @@
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Fêtes scolaires"> Fêtes scolaires</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Assurance"> Assurance</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="APE"> APE</label>
-              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Cantine"> Cantine (Petit-déj + Déjeuner)</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Cantine"> Cantine (Petit-déj + Déjeuner + Goûter Maternelle)</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Cantine crèche"> Cantine crèche</label>
-              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Goûter & Garderie"> Goûter &amp; Garderie</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Garderie"> Garderie</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Uniformes"> Uniformes</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Fournitures"> Fournitures</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Halte-Garderie"> Halte-Garderie</label>
@@ -538,7 +536,6 @@
           <select id="msgFiltreSect">
             <option value="">Toutes les sections</option>
             <option value="creche">Crèche</option>
-            <option value="garderie">Garderie midi</option>
             <option value="premat">Prématernelle</option>
             <option value="mat1">Maternelle 1</option>
             <option value="mat2">Maternelle 2</option>
@@ -589,18 +586,18 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=16"></script>
-<script src="assets/js/db.js?v=16"></script>
-<script src="assets/js/postes.js?v=16"></script>
-<script src="assets/js/whatsapp.js?v=16"></script>
-<script src="assets/js/enfants.js?v=16"></script>
-<script src="assets/js/entrees.js?v=16"></script>
-<script src="assets/js/sorties.js?v=16"></script>
-<script src="assets/js/dashboard.js?v=16"></script>
-<script src="assets/js/bilans.js?v=16"></script>
-<script src="assets/js/notes.js?v=16"></script>
-<script src="assets/js/app.js?v=16"></script>
-<script src="assets/js/pwa-install.js?v=16"></script>
+<script src="assets/js/config.js?v=17"></script>
+<script src="assets/js/db.js?v=17"></script>
+<script src="assets/js/postes.js?v=17"></script>
+<script src="assets/js/whatsapp.js?v=17"></script>
+<script src="assets/js/enfants.js?v=17"></script>
+<script src="assets/js/entrees.js?v=17"></script>
+<script src="assets/js/sorties.js?v=17"></script>
+<script src="assets/js/dashboard.js?v=17"></script>
+<script src="assets/js/bilans.js?v=17"></script>
+<script src="assets/js/notes.js?v=17"></script>
+<script src="assets/js/app.js?v=17"></script>
+<script src="assets/js/pwa-install.js?v=17"></script>
 <script>
   // Enregistrement du service worker (installation PWA + usage hors-ligne)
   if ("serviceWorker" in navigator) {

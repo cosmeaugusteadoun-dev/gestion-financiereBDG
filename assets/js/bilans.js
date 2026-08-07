@@ -37,14 +37,13 @@ var BILAN_SECTEUR_COULEURS = ["pink", "navy", "green", "gold", "blue", "orange",
 // Secteurs sans "dû" fiable : soit la fréquentation varie mois par mois au
 // gré des familles (Crèche, Cantine, Cantine crèche — un enfant peut y être
 // inscrit un mois et pas le suivant), soit le montant dépend d'achats
-// ponctuels et variables (Uniformes, Fournitures, Goûter & Garderie,
-// Halte-Garderie). Dans les deux cas, le "dû" généré ne représente pas une
-// vraie créance : la carte n'affiche que les montants réels (encaissé /
-// sorties / solde net), sans "Total attendu" ni "Reste à recouvrer" ni
-// "Taux de recouvrement".
+// ponctuels et variables (Uniformes, Fournitures, Garderie, Halte-Garderie).
+// Dans les deux cas, le "dû" généré ne représente pas une vraie créance : la
+// carte n'affiche que les montants réels (encaissé / sorties / solde net),
+// sans "Total attendu" ni "Reste à recouvrer" ni "Taux de recouvrement".
 var BILAN_SECTEURS_AU_CHOIX = [
   "Crèche", "Cantine", "Cantine crèche",
-  "Uniformes", "Fournitures", "Goûter & Garderie", "Halte-Garderie"
+  "Uniformes", "Fournitures", "Garderie", "Halte-Garderie"
 ];
 
 var BILAN_CATEGORIES_FIXES = [
@@ -55,9 +54,11 @@ var BILAN_CATEGORIES_FIXES = [
   { label: "Fêtes scolaires",           match: (p) => p.cat === "Fêtes scolaires" },
   { label: "Assurance",                 match: (p) => p.cat === "Assurance" },
   { label: "APE",                       match: (p) => p.cat === "APE" },
+  // Le goûter (Maternelle) est inclus ici — regroupé sous "Cantine" dès la
+  // génération des postes (voir buildPostes, postes.js).
   { label: "Cantine",                   match: (p) => p.cat === "Cantine" },
   { label: "Cantine crèche",            match: (p) => p.cat === "Cantine crèche" },
-  { label: "Goûter & Garderie",         match: (p) => p.cat === "Goûter" || p.cat === "Garderie" },
+  { label: "Garderie",                  match: (p) => p.cat === "Garderie" },
   { label: "Uniformes",                 match: (p) => p.cat === "Uniformes" },
   { label: "Fournitures",               match: (p) => p.cat === "Fournitures" },
   { label: "Halte-Garderie",            match: (p) => PONCTUEL_CRECHE_CATS.includes(p.cat) }

@@ -117,7 +117,10 @@ function buildPostes(sect, stat, opt) {
     p.push({ key:"ape",   cat:"APE",                     label:"APE",                     du:2500,  paye:0, dl:"19/10" });
     if (opt.ptdej === "oui") MOIS.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
     if (opt.dej   === "oui") MOIS.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
-    if (opt.gout  === "oui") MOIS.forEach(m => p.push({ key:`gout_${m}`,  cat:"Goûter",  label:`Goûter ${m}`,         du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+    // Le goûter est regroupé sous "Cantine" (comme le petit-déjeuner et le
+    // déjeuner) : un seul point de paiement/bilan pour la restauration,
+    // plutôt qu'une catégorie à part.
+    if (opt.gout  === "oui") MOIS.forEach(m => p.push({ key:`gout_${m}`,  cat:"Cantine",  label:`Goûter ${m}`,         du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
   }
 
   // ── PRIMAIRE (CI → CM1) ─────────────────────────────────────
@@ -186,7 +189,7 @@ var SECT_TO_CAT = {
   "Crèche":                  ["Crèche"],
   "Cantine":                 ["Cantine"],
   "Cantine crèche":          ["Cantine crèche"],
-  "Goûter & Garderie":       ["Goûter", "Garderie"],
+  "Garderie":                ["Garderie"],
   "Uniformes":               ["Uniformes"],
   "Fournitures":             ["Fournitures"],
   "Halte-Garderie":          ["Halte-Garderie"]
@@ -314,7 +317,7 @@ function posteEnRetard(p) {
   if (p.key === "t2") return today >= SEUIL_RETARD_T2;
   if (p.key === "t3") return today >= SEUIL_RETARD_T3;
 
-  // Postes mensuels (Crèche, Cantine, Cantine crèche, Goûter, Garderie) :
+  // Postes mensuels (Crèche, Cantine, Cantine crèche, Garderie) :
   // retard dès le jour de l'échéance (le 5 de chaque mois).
   return p.dl ? dlPassed(p.dl) : false;
 }
