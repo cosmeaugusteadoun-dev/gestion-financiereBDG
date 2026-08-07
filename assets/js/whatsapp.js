@@ -264,6 +264,14 @@ function dernierSuiviEnfant(enfantId) {
   return null;
 }
 
+// Un enfant est concerné par une relance de catégorie s'il a au moins un
+// poste en retard dans les catégories visées — pas seulement "pas encore
+// soldé sur l'année", sinon presque tout le monde serait relancé jusqu'en
+// juin (voir posteEnRetard, postes.js).
+function aRetardDansCategories(enfantId, cats) {
+  return STATE.postes.some(p => p.enfant_id === enfantId && cats.includes(p.cat) && posteEnRetard(p));
+}
+
 function enfantsFiltresMessagerie() {
   const recherche = (document.getElementById("msgRecherche")?.value || "").trim().toLowerCase();
   const filtreSect = document.getElementById("msgFiltreSect")?.value || "";
@@ -276,10 +284,10 @@ function enfantsFiltresMessagerie() {
       if (preset === "creche") return CRECHE_SECTS.includes(e.sect);
       if (preset === "maternelle") return MAT_SECTS.includes(e.sect);
       if (preset === "primaire") return PRIM_SECTS.includes(e.sect);
-      if (preset === "impayes") {
-        const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
-        return statutPaiement(postesEnfant) !== "solde";
-      }
+      // Scolarité et Cantine se relancent séparément : les échéances ne
+      // tombent pas aux mêmes dates, on ne veut pas les mélanger.
+      if (preset === "impayes_scolarite") return aRetardDansCategories(e.id, ["Scolarité"]);
+      if (preset === "impayes_cantine") return aRetardDansCategories(e.id, ["Cantine", "Cantine crèche"]);
       if (preset === "difficulte") return estEnDifficulte(dernierSuiviEnfant(e.id));
       if (preset === "abs_ret") return aAlerteAbsRet(dernierSuiviEnfant(e.id));
       if (preset === "comportement") return aComportementPreoccupant(dernierSuiviEnfant(e.id));

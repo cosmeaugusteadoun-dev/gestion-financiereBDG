@@ -34,13 +34,18 @@ var BILAN_SECTEUR_COULEURS = ["pink", "navy", "green", "gold", "blue", "orange",
 // pour un bilan lisible d'un coup d'œil. Maternelle et Primaire partagent
 // la même catégorie de poste ("Scolarité") : on les sépare ici en
 // retrouvant la section de l'enfant propriétaire de chaque poste.
-// Secteurs "au choix" : la fréquentation varie mois par mois au gré des
-// familles (un enfant peut être inscrit à la crèche ou à la cantine un
-// mois et pas le suivant) — le "dû" généré pour tous les mois de l'année
-// ne représente donc pas une vraie créance. Pour ces secteurs, la carte
-// n'affiche que les montants réels (encaissé / sorties / solde net), sans
-// "Total attendu" ni "Reste à recouvrer" ni "Taux de recouvrement".
-var BILAN_SECTEURS_AU_CHOIX = ["Crèche", "Cantine", "Cantine crèche"];
+// Secteurs sans "dû" fiable : soit la fréquentation varie mois par mois au
+// gré des familles (Crèche, Cantine, Cantine crèche — un enfant peut y être
+// inscrit un mois et pas le suivant), soit le montant dépend d'achats
+// ponctuels et variables (Uniformes, Fournitures, Goûter & Garderie,
+// Halte-Garderie). Dans les deux cas, le "dû" généré ne représente pas une
+// vraie créance : la carte n'affiche que les montants réels (encaissé /
+// sorties / solde net), sans "Total attendu" ni "Reste à recouvrer" ni
+// "Taux de recouvrement".
+var BILAN_SECTEURS_AU_CHOIX = [
+  "Crèche", "Cantine", "Cantine crèche",
+  "Uniformes", "Fournitures", "Goûter & Garderie", "Halte-Garderie"
+];
 
 var BILAN_CATEGORIES_FIXES = [
   { label: "Crèche",                    match: (p, ef) => p.cat === "Crèche" },
