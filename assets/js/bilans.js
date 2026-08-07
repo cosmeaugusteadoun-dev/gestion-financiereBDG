@@ -34,6 +34,14 @@ var BILAN_SECTEUR_COULEURS = ["pink", "navy", "green", "gold", "blue", "orange",
 // pour un bilan lisible d'un coup d'œil. Maternelle et Primaire partagent
 // la même catégorie de poste ("Scolarité") : on les sépare ici en
 // retrouvant la section de l'enfant propriétaire de chaque poste.
+// Secteurs "au choix" : la fréquentation varie mois par mois au gré des
+// familles (un enfant peut être inscrit à la crèche ou à la cantine un
+// mois et pas le suivant) — le "dû" généré pour tous les mois de l'année
+// ne représente donc pas une vraie créance. Pour ces secteurs, la carte
+// n'affiche que les montants réels (encaissé / sorties / solde net), sans
+// "Total attendu" ni "Reste à recouvrer" ni "Taux de recouvrement".
+var BILAN_SECTEURS_AU_CHOIX = ["Crèche", "Cantine", "Cantine crèche"];
+
 var BILAN_CATEGORIES_FIXES = [
   { label: "Crèche",                    match: (p, ef) => p.cat === "Crèche" },
   { label: "Maternelle",                match: (p, ef) => p.cat === "Scolarité" && ef && MAT_SECTS.includes(ef.sect) },
@@ -53,11 +61,19 @@ var BILAN_CATEGORIES_FIXES = [
 // Une carte détaillée par secteur : encaissé, total attendu, reste à
 // recouvrer, sorties imputées à ce secteur, taux de recouvrement, et un
 // bandeau "Solde net" (encaissé − sorties) coloré pour repérer la carte
-// d'un coup d'œil dans la liste.
+// d'un coup d'œil dans la liste. Les secteurs "au choix" (voir
+// BILAN_SECTEURS_AU_CHOIX) omettent les lignes basées sur le "dû".
 function renderBilanSecteurCard(label, du, paye, sortiesImputees, couleur) {
+  const auChoix = BILAN_SECTEURS_AU_CHOIX.includes(label);
   const reste = Math.max(du - paye, 0);
   const taux = du > 0 ? Math.round((paye / du) * 100) : 0;
   const soldeNet = paye - sortiesImputees;
+
+  const lignesAttendu = auChoix ? "" : `
+      <div class="poste-row"><div class="poste-label">Total attendu (familles)</div><div class="poste-amounts text-pink">${fmtFCFA(du)}</div></div>
+      <div class="poste-row"><div class="poste-label">Reste à recouvrer</div><div class="poste-amounts text-orange">${fmtFCFA(reste)}</div></div>`;
+  const ligneTaux = auChoix ? "" : `
+      <div class="poste-row"><div class="poste-label">Taux de recouvrement</div><div class="poste-amounts">${taux}%</div></div>`;
 
   return `
     <div class="card secteur-card">
@@ -65,11 +81,8 @@ function renderBilanSecteurCard(label, du, paye, sortiesImputees, couleur) {
         <span class="secteur-card-titre">${escapeHtml(label)}</span>
         <span class="secteur-card-total text-${couleur}">${fmtFCFA(paye)}</span>
       </div>
-      <div class="poste-row"><div class="poste-label">Encaissé</div><div class="poste-amounts text-green">${fmtFCFA(paye)}</div></div>
-      <div class="poste-row"><div class="poste-label">Total attendu (familles)</div><div class="poste-amounts text-pink">${fmtFCFA(du)}</div></div>
-      <div class="poste-row"><div class="poste-label">Reste à recouvrer</div><div class="poste-amounts text-orange">${fmtFCFA(reste)}</div></div>
-      <div class="poste-row"><div class="poste-label">Sorties imputées</div><div class="poste-amounts">− ${fmtFCFA(sortiesImputees)}</div></div>
-      <div class="poste-row"><div class="poste-label">Taux de recouvrement</div><div class="poste-amounts">${taux}%</div></div>
+      <div class="poste-row"><div class="poste-label">Encaissé</div><div class="poste-amounts text-green">${fmtFCFA(paye)}</div></div>${lignesAttendu}
+      <div class="poste-row"><div class="poste-label">Sorties imputées</div><div class="poste-amounts">− ${fmtFCFA(sortiesImputees)}</div></div>${ligneTaux}
       <div class="secteur-card-solde secteur-solde-${couleur}">
         <span>Solde net</span>
         <strong>${fmtFCFA(soldeNet)}</strong>

@@ -10,7 +10,8 @@ var STATE = {
   postes: [],    // lignes financières (générées par buildPostes)
   entrees: [],   // paiements reçus
   sorties: [],   // dépenses de l'école
-  suivi: []      // suivi scolaire par trimestre
+  suivi: [],     // suivi scolaire par trimestre (par élève)
+  suiviClasse: [] // suivi collectif par classe et par trimestre
 };
 
 // ============================================================
@@ -107,12 +108,13 @@ function confirmModal({ titre, texte, labelConfirmer = "Supprimer", danger = tru
 // CHARGEMENT INITIAL
 // ============================================================
 async function loadAll() {
-  const [enfantsRes, postesRes, entreesRes, sortiesRes, suiviRes] = await Promise.all([
+  const [enfantsRes, postesRes, entreesRes, sortiesRes, suiviRes, suiviClasseRes] = await Promise.all([
     supabase.from("enfants").select("*").order("nom", { ascending: true }),
     supabase.from("postes").select("*"),
     supabase.from("entrees").select("*").order("date", { ascending: false }),
     supabase.from("sorties").select("*").order("date", { ascending: false }),
-    supabase.from("suivi").select("*")
+    supabase.from("suivi").select("*"),
+    supabase.from("suivi_classe").select("*")
   ]);
 
   if (enfantsRes.error) throw enfantsRes.error;
@@ -120,12 +122,14 @@ async function loadAll() {
   if (entreesRes.error) throw entreesRes.error;
   if (sortiesRes.error) throw sortiesRes.error;
   if (suiviRes.error) throw suiviRes.error;
+  if (suiviClasseRes.error) throw suiviClasseRes.error;
 
   STATE.enfants = enfantsRes.data || [];
   STATE.postes = postesRes.data || [];
   STATE.entrees = entreesRes.data || [];
   STATE.sorties = sortiesRes.data || [];
   STATE.suivi = suiviRes.data || [];
+  STATE.suiviClasse = suiviClasseRes.data || [];
 }
 
 // ============================================================
@@ -199,5 +203,11 @@ async function dbDeleteSortie(id) {
 // ============================================================
 async function dbUpsertSuivi(suivi) {
   const { error } = await supabase.from("suivi").upsert(suivi, { onConflict: "enfant_id,trim" });
+  if (error) throw error;
+}
+
+// Suivi collectif par classe (observation générale, pas de moyenne/notes)
+async function dbUpsertSuiviClasse(suiviClasse) {
+  const { error } = await supabase.from("suivi_classe").upsert(suiviClasse, { onConflict: "sect,trim" });
   if (error) throw error;
 }

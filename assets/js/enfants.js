@@ -117,6 +117,12 @@ async function handleCreateEnfant(e) {
   const enfant = { id, nom, sect, stat, sexe, tel, parent, civilite, ddn, annee, opt, remise, remise_cible: remiseCible };
   const postesGeneres = fabriquerPostesEnfant(id, sect, stat, opt);
 
+  // La remise est créditée directement sur les postes réels (comme un
+  // paiement) — on mémorise les allocations pour pouvoir l'annuler
+  // proprement si le dossier est modifié plus tard.
+  const allocationsRemise = appliquerRemise(postesGeneres, remiseCible, remise);
+  opt.remise_allocations = allocationsRemise.map(a => ({ poste_id: a.poste.id, montant: a.montant }));
+
   try {
     await dbInsertEnfant(enfant);
     await dbReplacePostesEnfant(id, postesGeneres);
@@ -139,7 +145,7 @@ function fabriquerPostesEnfant(enfantId, sect, stat, opt) {
     key: p.key, cat: p.cat, label: p.label,
     du: p.du || 0, paye: p.paye || 0,
     mois: p.mois || null, dl: p.dl || null,
-    is_var: !!p.is_var, is_remise: !!p.is_remise
+    is_var: !!p.is_var, is_remise: false
   }));
 }
 
@@ -149,6 +155,15 @@ function fabriquerPostesEnfant(enfantId, sect, stat, opt) {
 // ============================================================
 function reconcilerPostes(enfant, newOpt) {
   const anciens = STATE.postes.filter(p => p.enfant_id === enfant.id);
+
+  // Annule d'abord le crédit de l'ancienne remise (si présente), pour
+  // repartir d'un historique de paiements "propre" avant d'appliquer la
+  // nouvelle — sinon une remise modifiée s'additionnerait à l'ancienne.
+  (enfant.opt.remise_allocations || []).forEach(a => {
+    const poste = anciens.find(p => p.id === a.poste_id);
+    if (poste) poste.paye = Math.max((poste.paye || 0) - (a.montant || 0), 0);
+  });
+
   const ancienParKey = {};
   anciens.forEach(p => { ancienParKey[p.key] = p; });
 
@@ -162,7 +177,7 @@ function reconcilerPostes(enfant, newOpt) {
       enfant_id: enfant.id,
       key: np.key, cat: np.cat, label: np.label,
       du: np.du || 0, mois: np.mois || null, dl: np.dl || null,
-      is_var: !!np.is_var, is_remise: !!np.is_remise,
+      is_var: !!np.is_var, is_remise: false,
       paye: anc ? (anc.paye || 0) : (np.paye || 0)
     });
     delete ancienParKey[np.key];
@@ -173,6 +188,12 @@ function reconcilerPostes(enfant, newOpt) {
   Object.values(ancienParKey).forEach(p => {
     if ((p.paye || 0) > 0) resultat.push(p);
   });
+
+  // Applique la nouvelle remise directement sur les postes réels, comme un
+  // paiement classique, et mémorise les allocations dans newOpt pour
+  // pouvoir l'annuler proprement la prochaine fois que le dossier change.
+  const allocationsRemise = appliquerRemise(resultat, newOpt.remiseCible, newOpt.remise);
+  newOpt.remise_allocations = allocationsRemise.map(a => ({ poste_id: a.poste.id, montant: a.montant }));
 
   return resultat;
 }
@@ -225,8 +246,6 @@ function renderEnfantItem(e) {
     if (!categories[catAffichage]) categories[catAffichage] = [];
     categories[catAffichage].push(p);
   });
-
-  const remisePoste = postesEnfant.find(p => p.is_remise);
 
   // Rendu d'une ligne de poste (montant dû + versé/restant, badge retard)
   function renderPosteRow(label, du, paye, isVar, retard) {
@@ -318,7 +337,7 @@ function renderEnfantItem(e) {
         </div>
       </div>
       <div class="enfant-body">
-        ${remisePoste ? `<div class="remise-badge"><i class="bi bi-gift-fill"></i> Remise de ${fmtFCFA(remisePoste.paye)} sur ${escapeHtml(remisePoste.cat)}</div>` : ""}
+        ${e.remise > 0 ? `<div class="remise-badge"><i class="bi bi-gift-fill"></i> Remise de ${fmtFCFA(e.remise)} sur ${escapeHtml(e.remise_cible || "—")} — créditée directement sur les échéances concernées</div>` : ""}
         ${catsHtml || '<p class="text-muted mt-1">Aucun poste financier.</p>'}
 
         <div class="postes-cat">

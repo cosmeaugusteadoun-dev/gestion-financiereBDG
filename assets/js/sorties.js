@@ -7,11 +7,19 @@ function initSorties() {
   document.getElementById("formSortie").addEventListener("submit", handleCreateSortie);
   document.getElementById("btnResetSortie").addEventListener("click", resetSortieForm);
 
-  // Style visuel (case cochée) pour le groupe de radios "Secteur imputé"
+  // Style visuel (case cochée) pour le groupe de radios "Secteur imputé" —
+  // une fois un secteur choisi, les autres se verrouillent (non cliquables)
+  // pour éviter un changement accidentel ; "Réinitialiser" les redéverrouille.
   document.querySelectorAll('input[name="sSecteur"]').forEach(radio => {
     radio.addEventListener("change", () => {
       document.querySelectorAll('#sSecteurs .checkbox-item').forEach(item => item.classList.remove("checked"));
       radio.closest(".checkbox-item").classList.add("checked");
+
+      document.querySelectorAll('input[name="sSecteur"]').forEach(autre => {
+        const verrouille = autre !== radio;
+        autre.disabled = verrouille;
+        autre.closest(".checkbox-item").classList.toggle("disabled", verrouille);
+      });
     });
   });
 }
@@ -19,7 +27,8 @@ function initSorties() {
 function resetSortieForm() {
   document.getElementById("formSortie").reset();
   document.getElementById("sDate").value = new Date().toISOString().slice(0, 10);
-  document.querySelectorAll('#sSecteurs .checkbox-item').forEach(item => item.classList.remove("checked"));
+  document.querySelectorAll('#sSecteurs .checkbox-item').forEach(item => item.classList.remove("checked", "disabled"));
+  document.querySelectorAll('input[name="sSecteur"]').forEach(radio => { radio.disabled = false; });
 }
 
 async function handleCreateSortie(e) {

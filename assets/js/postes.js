@@ -159,14 +159,12 @@ function buildPostes(sect, stat, opt) {
     p.push({ key:"four", cat:"Fournitures", label:"Fournitures scolaires", du:0, paye:0, is_var:true });
   }
 
-  // ── REMISE (si accordée) ───────────────────────────────────
-  if (opt.remise && parseFloat(opt.remise) > 0) {
-    p.push({
-      key:"remise", cat:opt.remiseCible||"Scolarité",
-      label:`Remise accordée (${opt.remiseCible||"Scolarité"})`,
-      du:0, paye:parseFloat(opt.remise), is_remise:true
-    });
-  }
+  // La remise (si accordée) n'est plus un poste fictif à part : elle est
+  // créditée directement sur les postes réels de la catégorie ciblée, comme
+  // un paiement classique (voir appliquerRemise, appelée par enfants.js à la
+  // création et à la reconciliation du dossier) — sans ça, un poste "remise"
+  // séparé ne se reflétait ni sur le détail par mois/tranche, ni sur les
+  // bilans par secteur, ni sur le message WhatsApp envoyé aux parents.
 
   return p;
 }
@@ -242,6 +240,19 @@ function imputerPaiement(postes, cat, montant, moisDepart) {
     allocations.push({ poste: avance, montant: reste });
   }
   return allocations;
+}
+
+// ============================================================
+// APPLICATION D'UNE REMISE (crédit direct, comme un paiement)
+// ============================================================
+// Une remise accordée doit se refléter exactement comme un versement du
+// parent : mois/tranche par mois/tranche, en commençant par le plus ancien
+// non soldé (même règle que imputerPaiement). Retourne les allocations
+// [{poste, montant}, ...] pour pouvoir annuler précisément la remise si
+// elle est modifiée ou supprimée plus tard (voir reconcilerPostes).
+function appliquerRemise(postes, cat, montant) {
+  if (!montant || montant <= 0 || !cat) return [];
+  return imputerPaiement(postes, cat, montant, null);
 }
 
 // ============================================================

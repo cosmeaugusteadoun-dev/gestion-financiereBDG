@@ -84,6 +84,16 @@ CREATE TABLE suivi (
   UNIQUE(enfant_id, trim)
 );
 
+-- Suivi collectif par classe et par trimestre (distinct du suivi individuel
+-- ci-dessus) : observation générale adressée à toute une classe.
+CREATE TABLE suivi_classe (
+  id            TEXT PRIMARY KEY,
+  sect          TEXT NOT NULL,
+  trim          TEXT NOT NULL,
+  observation   TEXT,
+  UNIQUE(sect, trim)
+);
+
 -- Index utiles pour les recherches fréquentes
 CREATE INDEX idx_postes_enfant   ON postes(enfant_id);
 CREATE INDEX idx_entrees_enfant  ON entrees(enfant_id);

@@ -25,6 +25,42 @@ var STAR_APPRECIATIONS = ["Peu satisfaisant", "Satisfaisant", "Très satisfaisan
 // bulletin annuel consolidé.
 var LIBELLES_TRIM = ["1er Trimestre", "2e Trimestre", "3e Trimestre"];
 
+// Libellés du trimestre pour le bulletin WhatsApp — forme normale ("1er
+// trimestre", dans le corps du texte) et forme MAJUSCULE (titres de section).
+var TRIM_LIBELLE_BULLETIN = {
+  "Trimestre 1": { normal: "1er trimestre", maj: "1ER TRIMESTRE" },
+  "Trimestre 2": { normal: "2e trimestre",  maj: "2E TRIMESTRE" },
+  "Trimestre 3": { normal: "3e trimestre",  maj: "3E TRIMESTRE" }
+};
+
+// Pastille de couleur associée à chaque niveau d'appréciation (résultats
+// académiques et Maternelle partagent la même échelle visuelle 🟢🟡🟠🔴).
+var EMOJI_APPRECIATION = {
+  "Excellent": "🟢", "Bien": "🟡", "Passable": "🟠", "En difficulté": "🔴",
+  "Très satisfaisant": "🟢", "Satisfaisant": "🟡", "Peu satisfaisant": "🔴"
+};
+
+// Paragraphe d'encouragement/accompagnement selon le niveau de résultat —
+// un seul et même texte, que la notation vienne de la moyenne (Primaire)
+// ou de l'appréciation étoilée (Maternelle).
+var PARAGRAPHE_RESULTAT = {
+  "Excellent": "Votre enfant réalise d'excellents résultats au cours de ce {trim}. Bravo pour ce travail remarquable !\nContinuons à l'encourager et à valoriser ses efforts — quelle belle réussite !",
+  "Très satisfaisant": "Votre enfant réalise d'excellents résultats au cours de ce {trim}. Bravo pour ce travail remarquable !\nContinuons à l'encourager et à valoriser ses efforts — quelle belle réussite !",
+  "Bien": "Votre enfant réalise de bons résultats au cours de ce {trim}. Félicitations !\nContinuons ensemble sur cette belle lancée. Encourageons-le/la à viser encore plus haut !",
+  "Satisfaisant": "Votre enfant réalise de bons résultats au cours de ce {trim}. Félicitations !\nContinuons ensemble sur cette belle lancée. Encourageons-le/la à viser encore plus haut !",
+  "Passable": "Votre enfant obtient des résultats moyens au cours de ce {trim}. Un potentiel encore à développer.\nUn accompagnement à la maison pourrait l'aider à progresser davantage — nous restons à votre disposition.",
+  "En difficulté": "Votre enfant rencontre des difficultés au cours de ce {trim}.\nUn accompagnement rapproché à la maison, ainsi qu'un échange avec l'équipe pédagogique, pourraient beaucoup l'aider. N'hésitez pas à nous contacter.",
+  "Peu satisfaisant": "Votre enfant rencontre des difficultés au cours de ce {trim}.\nUn accompagnement rapproché à la maison, ainsi qu'un échange avec l'équipe pédagogique, pourraient beaucoup l'aider. N'hésitez pas à nous contacter."
+};
+
+// Bloc "Comportement" — emoji + texte selon l'option choisie.
+var BLOC_COMPORTEMENT = {
+  "Exemplaire": { emoji: "🌟", texte: "Votre enfant fait preuve d'un comportement irréprochable en classe. Il/elle est un modèle de tenue et de respect pour ses camarades. Félicitations à vous et à lui/elle !" },
+  "Satisfaisant": { emoji: "🙂", texte: "Votre enfant se comporte bien en classe et respecte les règles de vie collective. Continuons à l'encourager dans cette voie !" },
+  "À améliorer": { emoji: "⚠️", texte: "Votre enfant a parfois du mal à respecter les règles de vie en classe. Un rappel bienveillant à la maison pourrait l'aider à progresser." },
+  "Préoccupant": { emoji: "🚨", texte: "Le comportement de votre enfant en classe nous préoccupe. Nous aimerions échanger avec vous pour l'accompagner au mieux — n'hésitez pas à nous contacter." }
+};
+
 function appreciationDepuisMoyenne(m) {
   if (m === null || m === undefined || isNaN(m)) return null;
   const g = GRILLE_MOYENNE.find(x => m >= x.seuil);
@@ -79,12 +115,34 @@ function aComportementPreoccupant(s) {
 // ============================================================
 // INITIALISATION
 // ============================================================
+// Mode de saisie du formulaire : "individuel" (élève, avec moyenne/notes)
+// ou "classe" (observation générale, sans champs de moyenne).
+var notesMode = "individuel";
+
 function initNotes() {
   document.getElementById("nEnfant").addEventListener("change", renderNotesForm);
+  document.getElementById("nClasse").addEventListener("change", renderNotesForm);
   document.getElementById("nTrim").addEventListener("change", () => {
     renderNotesForm();
     renderNotesMetriquesEtTable();
   });
+
+  document.getElementById("nClasse").innerHTML = Object.keys(SECT_LABELS)
+    .map(sect => `<option value="${sect}">${escapeHtml(SECT_LABELS[sect])}</option>`).join("");
+
+  document.querySelectorAll("#nModeToggle [data-mode]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      notesMode = btn.dataset.mode;
+      document.querySelectorAll("#nModeToggle [data-mode]").forEach(b => {
+        b.classList.toggle("btn-primary", b === btn);
+        b.classList.toggle("btn-ghost", b !== btn);
+      });
+      document.getElementById("nEnfantField").style.display = notesMode === "individuel" ? "" : "none";
+      document.getElementById("nClasseField").style.display = notesMode === "classe" ? "" : "none";
+      renderNotesForm();
+    });
+  });
+
   document.getElementById("btnAlerterDifficulte").addEventListener("click", handleAlerterDifficulte);
   document.getElementById("btnAlerterAbsRet").addEventListener("click", handleAlerterAbsRet);
   document.getElementById("btnAlerterComportement").addEventListener("click", handleAlerterComportement);
@@ -118,6 +176,8 @@ function renderNotes() {
 function renderNotesForm() {
   const root = document.getElementById("notesForm");
   if (!root) return;
+
+  if (notesMode === "classe") { renderNotesFormClasse(); return; }
 
   const enfantId = document.getElementById("nEnfant").value;
   const trim = document.getElementById("nTrim").value;
@@ -219,6 +279,82 @@ function renderNotesForm() {
   });
 }
 
+// ============================================================
+// FORMULAIRE DE SAISIE — SUIVI PAR CLASSE (observation générale, sans
+// moyenne ni appréciation individuelle) — même carte, mode "classe".
+// ============================================================
+function renderNotesFormClasse() {
+  const root = document.getElementById("notesForm");
+  if (!root) return;
+
+  const sect = document.getElementById("nClasse").value;
+  const trim = document.getElementById("nTrim").value;
+  const existant = STATE.suiviClasse.find(s => s.sect === sect && s.trim === trim) || {};
+  const nbElevesClasse = STATE.enfants.filter(e => e.sect === sect).length;
+
+  root.innerHTML = `
+    <div class="form-grid">
+      <div class="field" style="grid-column: 1 / -1;">
+        <label>Observation générale de la classe</label>
+        <textarea id="ncObservation" placeholder="Ex. Sortie éducative prévue, consigne pour la classe, information collective...">${escapeHtml(existant.observation || "")}</textarea>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="btnEnregistrerSuiviClasse"><i class="bi bi-check-lg"></i> Enregistrer</button>
+      <button class="btn btn-whatsapp" id="btnDiffuserClasse" ${nbElevesClasse === 0 ? "disabled" : ""}><i class="bi bi-whatsapp"></i> Diffuser aux parents de la classe (${nbElevesClasse})</button>
+    </div>
+  `;
+
+  document.getElementById("btnEnregistrerSuiviClasse").addEventListener("click", async () => {
+    await sauvegarderSuiviClasse(sect, trim, existant);
+  });
+
+  document.getElementById("btnDiffuserClasse").addEventListener("click", async () => {
+    const suiviClasse = await sauvegarderSuiviClasse(sect, trim, existant);
+    if (!suiviClasse) return;
+    const enfantsClasse = STATE.enfants.filter(e => e.sect === sect);
+    const avecTel = enfantsClasse.filter(e => formatTelWA(e.tel));
+    if (avecTel.length === 0) {
+      showToast("Aucun parent de cette classe n'a de numéro WhatsApp renseigné.", "error");
+      return;
+    }
+    avecTel.forEach(e => sendWhatsApp(e.tel, buildMessageSuiviClasse(sect, trim, suiviClasse.observation)));
+    showToast(`Diffusion lancée pour ${avecTel.length} parent(s). Autorisez les fenêtres pop-up si votre navigateur les bloque.`, "success");
+  });
+}
+
+async function sauvegarderSuiviClasse(sect, trim, existant) {
+  const observation = document.getElementById("ncObservation").value.trim();
+  if (!observation) {
+    showToast("Renseignez l'observation avant d'enregistrer.", "error");
+    return null;
+  }
+
+  const suiviClasse = { id: existant.id || uid("suvc"), sect, trim, observation };
+
+  try {
+    await dbUpsertSuiviClasse(suiviClasse);
+    const idx = STATE.suiviClasse.findIndex(s => s.sect === sect && s.trim === trim);
+    if (idx >= 0) STATE.suiviClasse[idx] = suiviClasse; else STATE.suiviClasse.push(suiviClasse);
+    showToast("Suivi de classe enregistré.", "success");
+    renderNotesForm();
+    return suiviClasse;
+  } catch (err) {
+    console.error(err);
+    showToast("Erreur lors de l'enregistrement du suivi de classe : " + err.message, "error");
+    return null;
+  }
+}
+
+function buildMessageSuiviClasse(sect, trim, observation) {
+  const section = SECT_LABELS[sect] || sect;
+  let msg = `Bonjour 👋,\n\n`;
+  msg += `📋 *Information de la classe — ${section} · ${trim}*\n\n`;
+  msg += `${observation}\n\n`;
+  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou · 📱 01 97 91 94 52\n_Amour · Travail · Discipline · Créativité_`;
+  return msg;
+}
+
 async function sauvegarderSuivi(enfant, trim, existant, isMat) {
   const moyenneVal = isMat ? null : (parseFloat(document.getElementById("nMoyenne").value) || null);
   const appreciationVal = isMat
@@ -256,21 +392,64 @@ async function sauvegarderSuivi(enfant, trim, existant, isMat) {
 // Le ton reste chaleureux, comme tous les messages envoyés aux parents.
 // ============================================================
 function buildMessageBulletin(enfant, suivi) {
-  const civiliteTxt = enfant.civilite && enfant.civilite !== "—" ? enfant.civilite : "";
+  const civiliteTxt = enfant.civilite && enfant.civilite !== "—" ? `${enfant.civilite} ` : "";
+  const destinataire = enfant.parent ? `${civiliteTxt}${enfant.parent}` : "cher parent";
   const prenom = (enfant.nom || "").split(" ")[0];
-  const resultat = suivi.is_mat
-    ? (suivi.appreciation || "—")
-    : (suivi.moy != null ? `${suivi.moy}/20 (${suivi.appreciation || "—"})` : "—");
+  const classe = SECT_LABELS[enfant.sect] || enfant.sect;
+  const trimInfo = TRIM_LIBELLE_BULLETIN[suivi.trim] || { normal: suivi.trim, maj: suivi.trim.toUpperCase() };
+  const DIV = "────────────────────";
 
-  let msg = `Bonjour ${civiliteTxt} ${enfant.parent || ""} 👋,\n\n`.replace(/ {2,}/g, " ");
-  msg += `📘 *Bulletin de ${prenom} — ${suivi.trim}*\n\n`;
-  msg += `• Résultat : *${resultat}*\n`;
-  msg += `• Absences non justifiées : ${suivi.absences || 0}\n`;
-  msg += `• Retards répétitifs : ${suivi.retards || 0}\n`;
-  msg += `• Comportement : ${suivi.comportement || "—"}\n`;
-  if (suivi.observation) msg += `• Observation : ${suivi.observation}\n`;
-  msg += `\nMerci pour votre confiance et votre implication dans le suivi de ${prenom}.\n\n`;
-  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou · 📱 01 97 91 94 52\n_Amour · Travail · Discipline · Créativité_`;
+  const appreciation = suivi.appreciation || null;
+  const resultatDispo = suivi.is_mat ? !!appreciation : suivi.moy != null;
+
+  let msg = `Bonjour — ${destinataire},\n\n`;
+  msg += `Bulletin scolaire de ${prenom} (${classe}) - ${trimInfo.normal}\n${DIV}\n\n`;
+
+  if (resultatDispo) {
+    msg += `📚 *RÉSULTATS — ${trimInfo.maj}*\n${DIV}\n`;
+    if (!suivi.is_mat) msg += `Moyenne générale : *${suivi.moy} / 20*\n`;
+    msg += `Appréciation     : ${EMOJI_APPRECIATION[appreciation] || "⚪"} ${appreciation}\n\n`;
+    const paragraphe = PARAGRAPHE_RESULTAT[appreciation];
+    if (paragraphe) msg += `${paragraphe.replace(/\{trim\}/g, trimInfo.normal)}\n\n`;
+  }
+
+  const absencesAlerte = (suivi.absences || 0) >= SEUIL_ALERTE_ABSENCES;
+  const retardsAlerte = (suivi.retards || 0) >= SEUIL_ALERTE_RETARDS;
+  const blocComportement = suivi.comportement ? BLOC_COMPORTEMENT[suivi.comportement] : null;
+
+  if (absencesAlerte || retardsAlerte || blocComportement) {
+    msg += `⚠️ *SIGNALEMENT — ${trimInfo.maj}*\n${DIV}\n\n`;
+
+    if (absencesAlerte) {
+      msg += `🚨 *ABSENCES NON JUSTIFIÉES : ${suivi.absences} absence(s)*\n`;
+      msg += `Votre enfant a accumulé ${suivi.absences} absence(s) non justifiée(s) au cours de ce ${trimInfo.normal}.\n`;
+      msg += `Nous vous prions de bien vouloir régulariser ces absences auprès de l'administration dans les meilleurs délais.\n`;
+      msg += `Une présence régulière et assidue est essentielle pour la réussite scolaire de votre enfant.\n\n`;
+    }
+
+    if (retardsAlerte) {
+      msg += `🔔 *RETARDS RÉPÉTITIFS : ${suivi.retards} retard(s) enregistrés* au cours de ce ${trimInfo.normal}\n`;
+      msg += `Les retards répétitifs perturbent non seulement votre enfant, mais également le bon déroulement des cours pour toute la classe.\n`;
+      msg += `Nous comptons sur votre précieux soutien pour favoriser une arrivée ponctuelle chaque matin.\n`;
+      msg += `Ensemble, nous pouvons corriger cette situation.\n\n`;
+    }
+
+    if (blocComportement) {
+      msg += `${blocComportement.emoji} *COMPORTEMENT : ${suivi.comportement.toUpperCase()}*\n`;
+      msg += `${blocComportement.texte}\n\n`;
+    }
+  }
+
+  if (suivi.observation) msg += `📝 *Observation* : ${suivi.observation}\n\n`;
+
+  msg += `${DIV}\n`;
+  msg += `💛🌸 Adorables parents, vous êtes nos meilleurs partenaires !\n`;
+  msg += `Nous vous remercions sincèrement pour votre confiance et votre engagement à nos côtés.\n`;
+  msg += `Ensemble, bâtissons l'avenir de nos enfants avec Amour et Discipline. 💛\n\n`;
+  msg += `Les Bulles de Joie — Parakou\n`;
+  msg += `Tel : 01 97 91 94 52\n`;
+  msg += `Amour · Travail · Discipline · Créativité`;
+
   return msg;
 }
 

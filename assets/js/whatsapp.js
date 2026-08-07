@@ -74,18 +74,22 @@ var ORDRE_CATEGORIES_BILAN = [
   "Fêtes scolaires", "Assurance", "APE", "Cantine", "Goûter", "Garderie"
 ];
 
-// Catégories facturées par échéance individuelle (mois ou tranche) : on
-// n'affiche jamais un total annuel qui mélangerait passé et à venir —
-// uniquement chaque échéance non soldée, une par une.
-var CATS_DETAILLEES_BILAN = ["Crèche", "Cantine crèche", "Cantine", "Scolarité"];
 var MOIS_ORDRE_BILAN = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
-var LIBELLES_COURTS_POSTE = { inscr: "Inscription", assur: "Assurance", t1: "Tranche 1", t2: "Tranche 2", t3: "Tranche 3" };
 
-function sousLibellePoste(p) {
-  if (p.mois) return p.mois;
-  return LIBELLES_COURTS_POSTE[p.key] || p.label;
-}
+// Une petite touche vivante et ludique par secteur — ce message s'adresse
+// aux parents d'enfants de crèche/maternelle/primaire, autant que possible
+// il doit rester chaleureux plutôt que comptable.
+var CAT_EMOJI_BILAN = {
+  "Cantine crèche": "🍼", "Crèche": "👶", "Scolarité": "🎒",
+  "Activités parascolaires": "🎨", "Fêtes scolaires": "🎉",
+  "Assurance": "🛡️", "APE": "🤝", "Cantine": "🍽️",
+  "Goûter": "🍪", "Garderie": "🕒"
+};
 
+// Bilan financier envoyé aux parents : on mentionne d'abord ce qui est déjà
+// réglé (✅), puis uniquement les échéances réellement en retard (⚠️) —
+// jamais les mois à venir qui ne sont pas encore dus, pour ne pas donner
+// une impression de dette qui n'existe pas encore.
 function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
   const parent = enfant.parent || "cher parent";
   const section = SECT_LABELS[enfant.sect] || enfant.sect;
@@ -98,56 +102,59 @@ function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
   msg += `💰 *SITUATION FINANCIERE*\n${DIV}\n`;
   msg += `Voici le détail de votre situation au ${aujourdHui} :\n\n`;
 
-  let totalReste = 0;
+  let totalRetard = 0;
   let aDesFraisScolarite = false;
 
   ORDRE_CATEGORIES_BILAN.forEach(cat => {
-    const lignes = postesEnfant.filter(p => p.cat === cat && !p.is_var && !p.is_remise && p.key !== "avance");
+    const lignes = postesEnfant
+      .filter(p => p.cat === cat && !p.is_var && !p.is_remise && p.key !== "avance")
+      .sort((a, b) => {
+        const am = a.mois ? MOIS_ORDRE_BILAN.indexOf(a.mois) : -1;
+        const bm = b.mois ? MOIS_ORDRE_BILAN.indexOf(b.mois) : -1;
+        return am - bm;
+      });
     if (lignes.length === 0) return;
     if (cat === "Scolarité") aDesFraisScolarite = true;
 
-    if (CATS_DETAILLEES_BILAN.includes(cat)) {
-      // Une ligne par échéance non soldée (mois ou tranche) — jamais de
-      // total annuel qui donnerait une impression de dette écrasante.
-      const nonSoldes = lignes
-        .filter(p => (p.paye || 0) < (p.du || 0))
-        .sort((a, b) => {
-          const am = a.mois ? MOIS_ORDRE_BILAN.indexOf(a.mois) : -1;
-          const bm = b.mois ? MOIS_ORDRE_BILAN.indexOf(b.mois) : -1;
-          return am - bm;
-        });
-      nonSoldes.forEach(p => {
-        const du = p.du || 0;
-        const paye = p.paye || 0;
-        const reste = Math.max(du - paye, 0);
-        totalReste += reste;
-        msg += `• *${cat} - ${sousLibellePoste(p)}*\n`;
-        msg += `  Montant dû    : ${fmtFCFA(du)}\n`;
-        msg += `  Déjà payé     : ${fmtFCFA(paye)}\n`;
-        msg += `  Reste à payer : *${fmtFCFA(reste)}*\n\n`;
-      });
-    } else {
-      const du = lignes.reduce((s, p) => s + (p.du || 0), 0);
-      const paye = lignes.reduce((s, p) => s + (p.paye || 0), 0);
-      const reste = Math.max(du - paye, 0);
-      if (reste <= 0) return; // déjà soldé : pas de ligne à afficher
-      totalReste += reste;
-      msg += `• *${cat}*\n`;
-      msg += `  Montant dû    : ${fmtFCFA(du)}\n`;
-      msg += `  Déjà payé     : ${fmtFCFA(paye)}\n`;
-      msg += `  Reste à payer : *${fmtFCFA(reste)}*\n\n`;
-    }
+    const blocs = [];
+    lignes.forEach(p => {
+      const du = p.du || 0;
+      const paye = p.paye || 0;
+      const retard = posteEnRetard(p);
+
+      if (paye >= du && du > 0) {
+        blocs.push(`✅ ${escapeHtml(p.label)} : ${fmtFCFA(paye)} payé`);
+      } else if (paye > 0) {
+        let ligne = `✅ ${escapeHtml(p.label)} : ${fmtFCFA(paye)} déjà versé`;
+        if (retard) {
+          const reste = Math.max(du - paye, 0);
+          totalRetard += reste;
+          ligne += ` — ⚠️ reste ${fmtFCFA(reste)} en retard`;
+        }
+        blocs.push(ligne);
+      } else if (retard) {
+        totalRetard += du;
+        blocs.push(`⚠️ ${escapeHtml(p.label)} : ${fmtFCFA(du)} en retard de paiement`);
+      }
+      // Sinon : échéance pas encore due — on n'en parle pas au parent.
+    });
+
+    if (blocs.length === 0) return;
+    msg += `${CAT_EMOJI_BILAN[cat] || "•"} *${cat}*\n`;
+    blocs.forEach(b => { msg += `  ${b}\n`; });
+    msg += `\n`;
   });
 
-  // Remise éventuelle
-  const remisePoste = postesEnfant.find(p => p.is_remise);
-  if (remisePoste) {
-    totalReste = Math.max(totalReste - (remisePoste.paye || 0), 0);
-    msg += `🎁 Remise accordée : -${fmtFCFA(remisePoste.paye)} sur ${remisePoste.cat}\n\n`;
+  // Remise éventuelle — créditée directement sur les échéances concernées,
+  // simplement rappelée ici pour la transparence avec le parent.
+  if (enfant.remise > 0) {
+    msg += `🎁 Remise accordée : -${fmtFCFA(enfant.remise)} sur ${enfant.remise_cible || "—"}\n\n`;
   }
 
   msg += `${DIV}\n`;
-  msg += `*TOTAL RESTANT : ${fmtFCFA(totalReste)}*\n\n`;
+  msg += totalRetard > 0
+    ? `*⚠️ TOTAL EN RETARD : ${fmtFCFA(totalRetard)}*\n\n`
+    : `*✅ Aucun retard de paiement — merci pour votre régularité !*\n\n`;
 
   // Rappel des échéances de tranches — uniquement pour Maternelle/Primaire
   if (aDesFraisScolarite) {
@@ -157,7 +164,9 @@ function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
     msg += `3ème tranche : au plus tard le 05 Février\n\n`;
   }
 
-  msg += `Merci de régulariser votre situation avant les échéances indiquées.\n\n`;
+  msg += totalRetard > 0
+    ? `Merci de respecter les délais indiqués ci-dessus. 🙏\n\n`
+    : `Merci de continuer à respecter les délais indiqués ci-dessus. 🙏\n\n`;
   msg += `${DIV}\n`;
   msg += `💛🌸 Adorables parents, vous êtes nos meilleurs partenaires !\n`;
   msg += `Nous vous remercions pour votre confiance et votre engagement.\n`;
@@ -243,6 +252,18 @@ function renderWhatsAppTab() {
 // Liste des enfants correspondant aux filtres actuels de la Messagerie
 // (recherche texte + section + préréglage). Réutilisée par le rendu de la
 // liste et par le bouton d'envoi groupé, pour rester toujours cohérentes.
+// Dernier suivi trimestriel renseigné pour un élève (le plus récent
+// trimestre disponible), utilisé par les filtres d'alerte de la Messagerie
+// — indépendant du trimestre actuellement sélectionné dans Notes & Suivi.
+var ORDRE_TRIM_RECENT = ["Trimestre 3", "Trimestre 2", "Trimestre 1"];
+function dernierSuiviEnfant(enfantId) {
+  for (const trim of ORDRE_TRIM_RECENT) {
+    const s = STATE.suivi.find(sv => sv.enfant_id === enfantId && sv.trim === trim);
+    if (s) return s;
+  }
+  return null;
+}
+
 function enfantsFiltresMessagerie() {
   const recherche = (document.getElementById("msgRecherche")?.value || "").trim().toLowerCase();
   const filtreSect = document.getElementById("msgFiltreSect")?.value || "";
@@ -259,6 +280,9 @@ function enfantsFiltresMessagerie() {
         const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
         return statutPaiement(postesEnfant) !== "solde";
       }
+      if (preset === "difficulte") return estEnDifficulte(dernierSuiviEnfant(e.id));
+      if (preset === "abs_ret") return aAlerteAbsRet(dernierSuiviEnfant(e.id));
+      if (preset === "comportement") return aComportementPreoccupant(dernierSuiviEnfant(e.id));
       return true;
     })
     .sort((a, b) => a.nom.localeCompare(b.nom));

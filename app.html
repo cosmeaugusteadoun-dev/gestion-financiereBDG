@@ -381,10 +381,11 @@
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Assurance"> Assurance</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="APE"> APE</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Cantine"> Cantine (Petit-déj + Déjeuner)</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Cantine crèche"> Cantine crèche</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Goûter & Garderie"> Goûter &amp; Garderie</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Uniformes"> Uniformes</label>
               <label class="checkbox-item"><input type="radio" name="sSecteur" value="Fournitures"> Fournitures</label>
-              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Administratif / Divers"> Administratif / Divers</label>
+              <label class="checkbox-item"><input type="radio" name="sSecteur" value="Halte-Garderie"> Halte-Garderie</label>
             </div>
           </div>
 
@@ -451,11 +452,19 @@
       </div>
 
       <div class="card">
-        <div class="card-title"><i class="bi bi-journal-text"></i> Saisir le suivi d'un élève</div>
+        <div class="card-title"><i class="bi bi-journal-text"></i> Saisir le suivi</div>
+        <div class="btn-group mb-2" id="nModeToggle">
+          <button type="button" class="btn btn-primary" data-mode="individuel">Suivi individuel</button>
+          <button type="button" class="btn btn-ghost" data-mode="classe">Suivi par classe</button>
+        </div>
         <div class="form-grid">
-          <div class="field">
+          <div class="field" id="nEnfantField">
             <label>Élève <span class="req">*</span></label>
             <select id="nEnfant"></select>
+          </div>
+          <div class="field" id="nClasseField" style="display:none;">
+            <label>Classe <span class="req">*</span></label>
+            <select id="nClasse"></select>
           </div>
           <div class="field">
             <label>Trimestre <span class="req">*</span></label>
@@ -545,6 +554,9 @@
             <option value="creche">Parents crèche</option>
             <option value="maternelle">Parents maternelle</option>
             <option value="primaire">Parents primaire</option>
+            <option value="difficulte">Alerte — élève en difficulté</option>
+            <option value="abs_ret">Alerte — absences/retards</option>
+            <option value="comportement">Alerte — comportement préoccupant</option>
           </select>
         </div>
         <div class="form-actions mb-2">
@@ -576,17 +588,17 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=13"></script>
-<script src="assets/js/db.js?v=13"></script>
-<script src="assets/js/postes.js?v=13"></script>
-<script src="assets/js/whatsapp.js?v=13"></script>
-<script src="assets/js/enfants.js?v=13"></script>
-<script src="assets/js/entrees.js?v=13"></script>
-<script src="assets/js/sorties.js?v=13"></script>
-<script src="assets/js/dashboard.js?v=13"></script>
-<script src="assets/js/bilans.js?v=13"></script>
-<script src="assets/js/notes.js?v=13"></script>
-<script src="assets/js/app.js?v=13"></script>
+<script src="assets/js/config.js?v=15"></script>
+<script src="assets/js/db.js?v=15"></script>
+<script src="assets/js/postes.js?v=15"></script>
+<script src="assets/js/whatsapp.js?v=15"></script>
+<script src="assets/js/enfants.js?v=15"></script>
+<script src="assets/js/entrees.js?v=15"></script>
+<script src="assets/js/sorties.js?v=15"></script>
+<script src="assets/js/dashboard.js?v=15"></script>
+<script src="assets/js/bilans.js?v=15"></script>
+<script src="assets/js/notes.js?v=15"></script>
+<script src="assets/js/app.js?v=15"></script>
 <script>
   // Enregistrement du service worker (installation PWA + usage hors-ligne)
   if ("serviceWorker" in navigator) {
