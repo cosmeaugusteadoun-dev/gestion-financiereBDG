@@ -50,6 +50,16 @@ function formatDateFR(iso) {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+// Calcule l'âge en mois révolus (utilisé pour les tranches d'âge crèche)
+function ageMois(ddn) {
+  if (!ddn) return null;
+  const naissance = new Date(ddn);
+  const auj = new Date();
+  let mois = (auj.getFullYear() - naissance.getFullYear()) * 12 + (auj.getMonth() - naissance.getMonth());
+  if (auj.getDate() < naissance.getDate()) mois--;
+  return Math.max(mois, 0);
+}
+
 // Calcule l'âge en années à partir d'une date de naissance
 function ageAns(ddn) {
   if (!ddn) return null;

@@ -48,7 +48,7 @@ var PARAGRAPHE_RESULTAT = {
   "Très satisfaisant": "Votre enfant réalise d'excellents résultats au cours de ce {trim}. Bravo pour ce travail remarquable !\nContinuons à l'encourager et à valoriser ses efforts — quelle belle réussite !",
   "Bien": "Votre enfant réalise de bons résultats au cours de ce {trim}. Félicitations !\nContinuons ensemble sur cette belle lancée. Encourageons-le/la à viser encore plus haut !",
   "Satisfaisant": "Votre enfant réalise de bons résultats au cours de ce {trim}. Félicitations !\nContinuons ensemble sur cette belle lancée. Encourageons-le/la à viser encore plus haut !",
-  "Passable": "Votre enfant obtient des résultats moyens au cours de ce {trim}. Un potentiel encore à développer.\nUn accompagnement à la maison pourrait l'aider à progresser davantage — nous restons à votre disposition.",
+  "Passable": "Les résultats de ce {trim} sont passables. Avec un soutien renforcé à la maison et un peu plus d'efforts, votre enfant peut atteindre de bien meilleurs résultats.",
   "En difficulté": "Votre enfant rencontre des difficultés au cours de ce {trim}.\nUn accompagnement rapproché à la maison, ainsi qu'un échange avec l'équipe pédagogique, pourraient beaucoup l'aider. N'hésitez pas à nous contacter.",
   "Peu satisfaisant": "Votre enfant rencontre des difficultés au cours de ce {trim}.\nUn accompagnement rapproché à la maison, ainsi qu'un échange avec l'équipe pédagogique, pourraient beaucoup l'aider. N'hésitez pas à nous contacter."
 };
@@ -60,6 +60,120 @@ var BLOC_COMPORTEMENT = {
   "À améliorer": { emoji: "⚠️", texte: "Votre enfant a parfois du mal à respecter les règles de vie en classe. Un rappel bienveillant à la maison pourrait l'aider à progresser." },
   "Préoccupant": { emoji: "🚨", texte: "Le comportement de votre enfant en classe nous préoccupe. Nous aimerions échanger avec vous pour l'accompagner au mieux — n'hésitez pas à nous contacter." }
 };
+
+// ============================================================
+// QUALITÉS & COMPORTEMENTS — CRÈCHE (2 mois à 2 ans et demi)
+// Remplace la moyenne/appréciation (non pertinente à cet âge) par une
+// sélection de traits de caractère positifs et d'attitudes à accompagner,
+// cochés par l'éducatrice selon la tranche d'âge de l'enfant. Chaque item
+// porte sa propre "phrase" (voix 3e personne) réutilisée telle quelle dans
+// le paragraphe envoyé aux parents (voir buildParagrapheCreche).
+// ============================================================
+var TRAITS_CRECHE = {
+  "2-12": {
+    label: "2 à 12 mois — Nourrissons et premiers mouvements",
+    positifs: [
+      { id: "souriant",    label: "Souriant / Éveillé",       phrase: "toujours souriant(e) et éveillé(e), il/elle interagit facilement avec son entourage par des gazouillis et des mimiques" },
+      { id: "petillant",   label: "Pétillant / Expressif",    phrase: "très communicatif/ve, il/elle manifeste clairement ses émotions et cherche le contact visuel" },
+      { id: "calme",       label: "Calme / Serein",           phrase: "d'un tempérament calme et serein, il/elle s'endort et s'alimente facilement" },
+      { id: "observateur", label: "Observateur / Attentif",   phrase: "très observateur/trice, il/elle regarde longuement son environnement avant d'agir" },
+      { id: "tonique",     label: "Tonique / Vigoureux",      phrase: "tonique et plein(e) d'énergie, il/elle progresse rapidement dans sa motricité" }
+    ],
+    accompagner: [
+      { id: "besogneux", label: "Besogneux / Demandeur",  phrase: "Il/elle a encore besoin d'une attention et d'une réassurance rapprochées pour se sentir en sécurité." },
+      { id: "sensible",  label: "Sensible / Réactif",     phrase: "Il/elle se montre sensible aux changements d'environnement ; nous veillons à des transitions en douceur." },
+      { id: "vibrant",   label: "Vibrant / Impatient",    phrase: "Il/elle exprime ses besoins avec beaucoup d'intensité — nous l'accompagnons à apaiser ces moments." }
+    ]
+  },
+  "12-30": {
+    label: "12 à 30 mois — Exploration et affirmation de soi",
+    positifs: [
+      { id: "explorateur", label: "Explorateur / Curieux",   phrase: "très explorateur/trice et curieux/se, il/elle découvre son environnement avec enthousiasme" },
+      { id: "dynamique",   label: "Dynamique / Vif",         phrase: "débordant(e) d'énergie et très vif/ve sur le plan moteur" },
+      { id: "sociable",    label: "Sociable / Avenant",      phrase: "sociable et avenant(e), il/elle va facilement vers les autres et partage volontiers" },
+      { id: "autonome",    label: "Autonome / Déterminé",    phrase: "autonome et déterminé(e), il/elle aime faire seul(e) et persévère dans ses activités" },
+      { id: "calin",       label: "Câlin / Affectueux",      phrase: "très câlin(e) et affectueux/se, il/elle recherche régulièrement les moments de complicité" }
+    ],
+    accompagner: [
+      { id: "petulant", label: "Pétulant / Débordant d'énergie", phrase: "Son énergie pétulante nécessite encore un accompagnement doux pour l'amener vers des moments de retour au calme." },
+      { id: "affirme",  label: "Affirmé / Volontaire",           phrase: "Il/elle affirme fortement sa personnalité et teste les limites — un signe de belle affirmation de soi que nous accompagnons avec bienveillance." },
+      { id: "reserve",  label: "Réservé / Précautionneux",       phrase: "Il/elle prend son temps pour observer le groupe avant de s'y joindre ; nous respectons son rythme." },
+      { id: "exclusif", label: "Exclusif / Fusionnel",           phrase: "Il/elle reste encore très attaché(e) à un adulte ou à son doudou, un repère précieux qui l'aide à explorer en confiance." }
+    ]
+  }
+};
+
+// Détermine la tranche d'âge par défaut d'après la date de naissance —
+// l'éducatrice peut la changer manuellement si besoin (voir renderNotesForm).
+function trancheAgeCreche(ddn) {
+  const mois = ageMois(ddn);
+  if (mois === null) return "2-12";
+  return mois < 12 ? "2-12" : "12-30";
+}
+
+// Construit le paragraphe envoyé aux parents à partir des traits cochés —
+// combine les adjectifs des traits positifs, puis ajoute la phrase de
+// chaque attitude à accompagner comme observation à part entière.
+// Ex. "Théo est un enfant très explorateur et vif. Son énergie pétulante
+// nécessite encore un accompagnement doux..."
+function buildParagrapheCreche(prenom, selPositifs, selAccompagner, tranche) {
+  const data = TRAITS_CRECHE[tranche] || TRAITS_CRECHE["2-12"];
+  const adjectifs = (selPositifs || [])
+    .map(id => { const item = data.positifs.find(x => x.id === id); return item ? item.label.split(" / ")[0].toLowerCase() : null; })
+    .filter(Boolean);
+
+  let paragraphe = "";
+  if (adjectifs.length > 0) {
+    const liste = adjectifs.length === 1 ? adjectifs[0] : adjectifs.slice(0, -1).join(", ") + " et " + adjectifs[adjectifs.length - 1];
+    paragraphe += `${prenom} est un enfant très ${liste}.`;
+  }
+
+  (selAccompagner || []).forEach(id => {
+    const item = data.accompagner.find(x => x.id === id);
+    if (item) paragraphe += (paragraphe ? "\n" : "") + item.phrase;
+  });
+
+  return paragraphe || null;
+}
+
+// Checkboxes des deux groupes (traits positifs / attitudes à accompagner)
+// pour la tranche donnée — isolé pour pouvoir régénérer uniquement ces deux
+// blocs quand l'éducatrice change la tranche d'âge, sans perdre le reste
+// du formulaire en cours de saisie.
+function traitsChecklistHTML(tranche, selPositifs, selAccompagner) {
+  const data = TRAITS_CRECHE[tranche] || TRAITS_CRECHE["2-12"];
+  const ligne = (item, selection) => `
+    <label class="checkbox-item ${selection.includes(item.id) ? "checked" : ""}">
+      <input type="checkbox" value="${item.id}" ${selection.includes(item.id) ? "checked" : ""}>
+      ${escapeHtml(item.label)}
+    </label>`;
+  return {
+    positifsHTML: data.positifs.map(item => ligne(item, selPositifs)).join(""),
+    accompagnerHTML: data.accompagner.map(item => ligne(item, selAccompagner)).join("")
+  };
+}
+
+// Widget complet (tranche d'âge + les deux checklists) pour le rendu
+// initial du formulaire Crèche.
+function traitsCrecheHTML(tranche, selPositifs, selAccompagner) {
+  const { positifsHTML, accompagnerHTML } = traitsChecklistHTML(tranche, selPositifs, selAccompagner);
+  return `
+    <div class="field" style="grid-column: 1 / -1;">
+      <label>Tranche d'âge</label>
+      <div class="radio-row">
+        <label class="radio-item"><input type="radio" name="nTrancheAge" value="2-12" ${tranche === "2-12" ? "checked" : ""}> 2 à 12 mois</label>
+        <label class="radio-item"><input type="radio" name="nTrancheAge" value="12-30" ${tranche === "12-30" ? "checked" : ""}> 12 à 30 mois</label>
+      </div>
+    </div>
+    <div class="field" style="grid-column: 1 / -1;">
+      <label>Traits positifs (plusieurs choix possibles)</label>
+      <div class="checkbox-grid" id="nTraitsPositifs">${positifsHTML}</div>
+    </div>
+    <div class="field" style="grid-column: 1 / -1;">
+      <label>Attitudes à accompagner (plusieurs choix possibles)</label>
+      <div class="checkbox-grid" id="nTraitsAccompagner">${accompagnerHTML}</div>
+    </div>`;
+}
 
 function appreciationDepuisMoyenne(m) {
   if (m === null || m === undefined || isNaN(m)) return null;
@@ -121,7 +235,10 @@ var notesMode = "individuel";
 
 function initNotes() {
   document.getElementById("nEnfant").addEventListener("change", renderNotesForm);
-  document.getElementById("nClasse").addEventListener("change", renderNotesForm);
+  document.getElementById("nClasse").addEventListener("change", () => {
+    renderNotesForm();
+    renderNotesMetriquesEtTable();
+  });
   document.getElementById("nTrim").addEventListener("change", () => {
     renderNotesForm();
     renderNotesMetriquesEtTable();
@@ -140,6 +257,7 @@ function initNotes() {
       document.getElementById("nEnfantField").style.display = notesMode === "individuel" ? "" : "none";
       document.getElementById("nClasseField").style.display = notesMode === "classe" ? "" : "none";
       renderNotesForm();
+      renderNotesMetriquesEtTable();
     });
   });
 
@@ -188,18 +306,29 @@ function renderNotesForm() {
     return;
   }
 
+  const isCreche = enfant.sect === "creche";
   const isMat = MAT_SECTS.includes(enfant.sect);
   const existant = STATE.suivi.find(s => s.enfant_id === enfantId && s.trim === trim) || {};
   const appreciationAutoInit = appreciationDepuisMoyenne(existant.moy);
+  const trancheActuelle = existant.tranche_age || trancheAgeCreche(enfant.ddn);
+
+  let blocResultat;
+  if (isCreche) {
+    blocResultat = traitsCrecheHTML(trancheActuelle, existant.qualites_positives || [], existant.qualites_accompagner || []);
+  } else if (isMat) {
+    blocResultat = `<div class="field" style="grid-column: 1 / -1;"><label>Appréciation</label>${starRatingHTML(existant.appreciation)}</div>`;
+  } else {
+    blocResultat = `
+      <div class="field" style="grid-column: 1 / -1;">
+        <label>Moyenne (/20)</label>
+        <input type="number" id="nMoyenne" min="0" max="20" step="0.25" placeholder="Ex. 13.5" value="${existant.moy ?? ""}">
+        <div class="field-hint">Appréciation automatique : <strong id="nAppreciationAuto" class="${classeAppreciation(appreciationAutoInit)}">${appreciationAutoInit || "—"}</strong></div>
+      </div>`;
+  }
 
   root.innerHTML = `
     <div class="form-grid">
-      <div class="field" style="grid-column: 1 / -1;">
-        <label>${isMat ? "Appréciation" : "Moyenne (/20)"}</label>
-        ${isMat ? starRatingHTML(existant.appreciation) : `
-          <input type="number" id="nMoyenne" min="0" max="20" step="0.25" placeholder="Ex. 13.5" value="${existant.moy ?? ""}">
-          <div class="field-hint">Appréciation automatique : <strong id="nAppreciationAuto" class="${classeAppreciation(appreciationAutoInit)}">${appreciationAutoInit || "—"}</strong></div>`}
-      </div>
+      ${blocResultat}
       <div class="field"><label>Absences non justifiées</label><input type="number" id="nAbsences" min="0" value="${existant.absences ?? 0}"></div>
       <div class="field"><label>Retards répétitifs</label><input type="number" id="nRetards" min="0" value="${existant.retards ?? 0}"></div>
       <div style="grid-column: 1 / -1;" id="nAlerteAbsRet"></div>
@@ -221,8 +350,27 @@ function renderNotesForm() {
     </div>
   `;
 
-  // Aperçu live de l'appréciation automatique (mode moyenne)
-  if (!isMat) {
+  // Bascule "checked" au clic pour toutes les checkbox-item du formulaire
+  // (délégation : couvre aussi les traits Crèche régénérés dynamiquement).
+  root.addEventListener("change", (e) => {
+    if (e.target.matches('input[type="checkbox"]')) {
+      e.target.closest(".checkbox-item")?.classList.toggle("checked", e.target.checked);
+    }
+  });
+
+  if (isCreche) {
+    // Changer la tranche d'âge régénère les deux checklists (les traits ne
+    // sont pas les mêmes d'une tranche à l'autre) sans perdre le reste du
+    // formulaire en cours de saisie.
+    document.querySelectorAll('input[name="nTrancheAge"]').forEach(radio => {
+      radio.addEventListener("change", () => {
+        const { positifsHTML, accompagnerHTML } = traitsChecklistHTML(radio.value, [], []);
+        document.getElementById("nTraitsPositifs").innerHTML = positifsHTML;
+        document.getElementById("nTraitsAccompagner").innerHTML = accompagnerHTML;
+      });
+    });
+  } else if (!isMat) {
+    // Aperçu live de l'appréciation automatique (mode moyenne)
     document.getElementById("nMoyenne").addEventListener("input", (e) => {
       const val = parseFloat(e.target.value);
       const label = appreciationDepuisMoyenne(isNaN(val) ? null : val);
@@ -265,14 +413,15 @@ function renderNotesForm() {
   rafraichirAlerte();
 
   document.getElementById("btnEnregistrerSuivi").addEventListener("click", async () => {
-    const suivi = await sauvegarderSuivi(enfant, trim, existant, isMat);
+    const suivi = await sauvegarderSuivi(enfant, trim, existant, isMat, isCreche);
     if (suivi) { renderNotesForm(); renderNotesMetriquesEtTable(); }
   });
 
   document.getElementById("btnNotifierParent")?.addEventListener("click", async () => {
-    const suivi = await sauvegarderSuivi(enfant, trim, existant, isMat);
+    const suivi = await sauvegarderSuivi(enfant, trim, existant, isMat, isCreche);
     if (suivi) {
-      sendWhatsApp(enfant.tel, buildMessageBulletin(enfant, suivi));
+      const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
+      sendWhatsApp(enfant.tel, buildMessageBulletin(enfant, suivi, postesEnfant));
       renderNotesForm();
       renderNotesMetriquesEtTable();
     }
@@ -355,11 +504,21 @@ function buildMessageSuiviClasse(sect, trim, observation) {
   return msg;
 }
 
-async function sauvegarderSuivi(enfant, trim, existant, isMat) {
-  const moyenneVal = isMat ? null : (parseFloat(document.getElementById("nMoyenne").value) || null);
-  const appreciationVal = isMat
-    ? (document.getElementById("nAppreciation").value || null)
-    : appreciationDepuisMoyenne(moyenneVal);
+async function sauvegarderSuivi(enfant, trim, existant, isMat, isCreche) {
+  const moyenneVal = (isMat || isCreche) ? null : (parseFloat(document.getElementById("nMoyenne").value) || null);
+  const appreciationVal = isCreche
+    ? null
+    : isMat
+      ? (document.getElementById("nAppreciation").value || null)
+      : appreciationDepuisMoyenne(moyenneVal);
+
+  const qualitesPositives = isCreche
+    ? Array.from(document.querySelectorAll("#nTraitsPositifs input:checked")).map(cb => cb.value)
+    : [];
+  const qualitesAccompagner = isCreche
+    ? Array.from(document.querySelectorAll("#nTraitsAccompagner input:checked")).map(cb => cb.value)
+    : [];
+  const trancheAge = isCreche ? (document.querySelector('input[name="nTrancheAge"]:checked')?.value || null) : null;
 
   const suivi = {
     id: existant.id || uid("suv"),
@@ -371,7 +530,10 @@ async function sauvegarderSuivi(enfant, trim, existant, isMat) {
     retards: parseInt(document.getElementById("nRetards").value, 10) || 0,
     comportement: document.getElementById("nComportement").value || null,
     observation: document.getElementById("nObservation").value.trim() || null,
-    is_mat: isMat
+    is_mat: isMat,
+    qualites_positives: qualitesPositives,
+    qualites_accompagner: qualitesAccompagner,
+    tranche_age: trancheAge
   };
 
   try {
@@ -391,49 +553,60 @@ async function sauvegarderSuivi(enfant, trim, existant, isMat) {
 // MESSAGES WHATSAPP (bulletin individuel + 3 alertes ciblées)
 // Le ton reste chaleureux, comme tous les messages envoyés aux parents.
 // ============================================================
-function buildMessageBulletin(enfant, suivi) {
+// Rapport combiné envoyé aux parents depuis Notes & Suivi : bilan
+// scolaire/qualités + signalements (absences/retards/comportement) + la
+// situation financière complète (voir construireSectionFinanciere,
+// whatsapp.js — rendu inchangé, réutilisé tel quel).
+function buildMessageBulletin(enfant, suivi, postesEnfant) {
   const civiliteTxt = enfant.civilite && enfant.civilite !== "—" ? `${enfant.civilite} ` : "";
   const destinataire = enfant.parent ? `${civiliteTxt}${enfant.parent}` : "cher parent";
   const prenom = (enfant.nom || "").split(" ")[0];
-  const classe = SECT_LABELS[enfant.sect] || enfant.sect;
+  const section = SECT_LABELS[enfant.sect] || enfant.sect;
+  const isCreche = enfant.sect === "creche";
   const trimInfo = TRIM_LIBELLE_BULLETIN[suivi.trim] || { normal: suivi.trim, maj: suivi.trim.toUpperCase() };
   const DIV = "────────────────────";
 
+  const paragrapheCreche = isCreche
+    ? buildParagrapheCreche(prenom, suivi.qualites_positives || [], suivi.qualites_accompagner || [], suivi.tranche_age || "2-12")
+    : null;
   const appreciation = suivi.appreciation || null;
-  const resultatDispo = suivi.is_mat ? !!appreciation : suivi.moy != null;
+  const resultatDispo = isCreche ? !!paragrapheCreche : (suivi.is_mat ? !!appreciation : suivi.moy != null);
 
-  let msg = `Bonjour — ${destinataire},\n\n`;
-  msg += `Bulletin scolaire de ${prenom} (${classe}) - ${trimInfo.normal}\n${DIV}\n\n`;
+  let msg = `Bonjour ${destinataire},\n\n`;
+  msg += `Voici un récapitulatif concernant votre enfant :\n`;
+  msg += `*${enfant.nom}* - ${section}\n${DIV}\n\n`;
 
   if (resultatDispo) {
-    msg += `📚 *RÉSULTATS — ${trimInfo.maj}*\n${DIV}\n`;
-    if (!suivi.is_mat) msg += `Moyenne générale : *${suivi.moy} / 20*\n`;
-    msg += `Appréciation     : ${EMOJI_APPRECIATION[appreciation] || "⚪"} ${appreciation}\n\n`;
-    const paragraphe = PARAGRAPHE_RESULTAT[appreciation];
-    if (paragraphe) msg += `${paragraphe.replace(/\{trim\}/g, trimInfo.normal)}\n\n`;
+    msg += `📚 *BILAN SCOLAIRE — ${trimInfo.maj}*\n${DIV}\n`;
+    if (isCreche) {
+      msg += `${paragrapheCreche}\n\n`;
+    } else {
+      if (!suivi.is_mat) msg += `Moyenne générale : *${suivi.moy} / 20*\n`;
+      msg += `Appréciation     : ${EMOJI_APPRECIATION[appreciation] || "⚪"} ${appreciation}\n\n`;
+      const paragraphe = PARAGRAPHE_RESULTAT[appreciation];
+      if (paragraphe) msg += `${paragraphe.replace(/\{trim\}/g, trimInfo.normal)}\n\n`;
+    }
   }
 
   const absencesAlerte = (suivi.absences || 0) >= SEUIL_ALERTE_ABSENCES;
   const retardsAlerte = (suivi.retards || 0) >= SEUIL_ALERTE_RETARDS;
-  const blocComportement = suivi.comportement ? BLOC_COMPORTEMENT[suivi.comportement] : null;
 
-  if (absencesAlerte || retardsAlerte || blocComportement) {
-    msg += `⚠️ *SIGNALEMENT — ${trimInfo.maj}*\n${DIV}\n\n`;
+  if (absencesAlerte) {
+    msg += `🚨 *ABSENCES NON JUSTIFIÉES : ${suivi.absences} absence(s) — ${trimInfo.normal}*\n`;
+    msg += `Votre enfant a accumulé ${suivi.absences} absence(s) non justifiée(s) au cours de ce ${trimInfo.normal}.\n`;
+    msg += `Nous vous prions de bien vouloir régulariser ces absences auprès de l'administration dans les meilleurs délais. Une présence régulière et assidue est essentielle pour la réussite de votre enfant.\n\n`;
+  }
 
-    if (absencesAlerte) {
-      msg += `🚨 *ABSENCES NON JUSTIFIÉES : ${suivi.absences} absence(s)*\n`;
-      msg += `Votre enfant a accumulé ${suivi.absences} absence(s) non justifiée(s) au cours de ce ${trimInfo.normal}.\n`;
-      msg += `Nous vous prions de bien vouloir régulariser ces absences auprès de l'administration dans les meilleurs délais.\n`;
-      msg += `Une présence régulière et assidue est essentielle pour la réussite scolaire de votre enfant.\n\n`;
-    }
+  if (retardsAlerte) {
+    msg += `🔔 *RETARDS RÉPÉTITIFS : ${suivi.retards} retard(s) — ${trimInfo.normal}*\n`;
+    msg += `Les retards répétitifs perturbent votre enfant et le bon déroulement des cours. Nous comptons sur votre précieux soutien pour une arrivée ponctuelle chaque matin. Ensemble, nous pouvons corriger cela.\n\n`;
+  }
 
-    if (retardsAlerte) {
-      msg += `🔔 *RETARDS RÉPÉTITIFS : ${suivi.retards} retard(s) enregistrés* au cours de ce ${trimInfo.normal}\n`;
-      msg += `Les retards répétitifs perturbent non seulement votre enfant, mais également le bon déroulement des cours pour toute la classe.\n`;
-      msg += `Nous comptons sur votre précieux soutien pour favoriser une arrivée ponctuelle chaque matin.\n`;
-      msg += `Ensemble, nous pouvons corriger cette situation.\n\n`;
-    }
-
+  if (suivi.comportement === "Préoccupant") {
+    msg += `🚨🚨 *COMPORTEMENT PRÉOCCUPANT — ACTION URGENTE*\n`;
+    msg += `Le comportement de votre enfant est devenu préoccupant. Nous vous invitons instamment à prendre contact avec la direction dans les plus brefs délais. Ensemble nous trouverons les solutions adaptées.\n\n`;
+  } else if (suivi.comportement) {
+    const blocComportement = BLOC_COMPORTEMENT[suivi.comportement];
     if (blocComportement) {
       msg += `${blocComportement.emoji} *COMPORTEMENT : ${suivi.comportement.toUpperCase()}*\n`;
       msg += `${blocComportement.texte}\n\n`;
@@ -442,13 +615,15 @@ function buildMessageBulletin(enfant, suivi) {
 
   if (suivi.observation) msg += `📝 *Observation* : ${suivi.observation}\n\n`;
 
+  msg += construireSectionFinanciere(enfant, postesEnfant || []);
+
   msg += `${DIV}\n`;
   msg += `💛🌸 Adorables parents, vous êtes nos meilleurs partenaires !\n`;
-  msg += `Nous vous remercions sincèrement pour votre confiance et votre engagement à nos côtés.\n`;
-  msg += `Ensemble, bâtissons l'avenir de nos enfants avec Amour et Discipline. 💛\n\n`;
-  msg += `Les Bulles de Joie — Parakou\n`;
+  msg += `Nous vous remercions pour votre confiance et votre engagement.\n`;
+  msg += `Ensemble construisons l avenir de nos enfants avec amour et discipline. 💛\n\n`;
+  msg += `Les Bulles de Joie - Parakou\n`;
   msg += `Tel : 01 97 91 94 52\n`;
-  msg += `Amour · Travail · Discipline · Créativité`;
+  msg += `Amour · Travail · Discipline · Creativite`;
 
   return msg;
 }
@@ -543,7 +718,7 @@ function envoyerEnMasse(liste, builder, libelle) {
     showToast("Aucun des parents concernés n'a de numéro WhatsApp renseigné.", "error");
     return;
   }
-  avecTel.forEach(x => sendWhatsApp(x.enfant.tel, builder(x.enfant, x.suivi)));
+  avecTel.forEach(x => sendWhatsApp(x.enfant.tel, builder(x.enfant, x.suivi, STATE.postes.filter(p => p.enfant_id === x.enfant.id))));
   showToast(`Envoi lancé pour ${avecTel.length} parent(s). Autorisez les fenêtres pop-up si votre navigateur les bloque.`, "success");
 }
 
@@ -589,7 +764,14 @@ function renderNotesMetriquesEtTable() {
   if (!metricsRoot || !tableRoot) return;
 
   const trim = document.getElementById("nTrim").value;
-  const lignes = STATE.enfants.slice().sort((a, b) => a.nom.localeCompare(b.nom)).map(e => ({
+
+  // En mode "classe", le dossier de suivi et ses totaux ne portent que sur
+  // les élèves de la classe sélectionnée — pas sur toute l'école.
+  const enClasse = notesMode === "classe";
+  const sectCible = enClasse ? document.getElementById("nClasse").value : "";
+  const enfantsCibles = enClasse ? STATE.enfants.filter(e => e.sect === sectCible) : STATE.enfants;
+
+  const lignes = enfantsCibles.slice().sort((a, b) => a.nom.localeCompare(b.nom)).map(e => ({
     enfant: e,
     suivi: STATE.suivi.find(s => s.enfant_id === e.id && s.trim === trim) || null
   }));
@@ -598,13 +780,19 @@ function renderNotesMetriquesEtTable() {
   const enDifficulte = lignes.filter(x => estEnDifficulte(x.suivi)).length;
   const alertesAbsRet = lignes.filter(x => aAlerteAbsRet(x.suivi)).length;
   const excellents = lignes.filter(x => estExcellent(x.suivi)).length;
+  const totalAbsences = lignes.reduce((s, x) => s + (x.suivi?.absences || 0), 0);
+  const totalRetards = lignes.reduce((s, x) => s + (x.suivi?.retards || 0), 0);
+
+  // Pourcentages calculés sur l'effectif ciblé (classe ou école entière),
+  // pour évaluer une classe d'un coup d'œil plutôt qu'un chiffre brut isolé.
+  const pct = (n) => lignes.length > 0 ? Math.round((n / lignes.length) * 100) : 0;
 
   metricsRoot.innerHTML = `
-    <div class="metric-card metric-navy"><div class="metric-label">Élèves inscrits</div><div class="metric-value">${STATE.enfants.length}</div></div>
-    <div class="metric-card metric-green"><div class="metric-label">Notes saisies</div><div class="metric-value">${notesSaisies}</div></div>
-    <div class="metric-card metric-red"><div class="metric-label">En difficulté</div><div class="metric-value">${enDifficulte}</div></div>
-    <div class="metric-card metric-gold"><div class="metric-label">Alertes abs/ret</div><div class="metric-value">${alertesAbsRet}</div></div>
-    <div class="metric-card metric-lime"><div class="metric-label">Excellents</div><div class="metric-value">${excellents}</div></div>
+    <div class="metric-card metric-navy"><div class="metric-label">${enClasse ? "Élèves de la classe" : "Élèves inscrits"}</div><div class="metric-value">${lignes.length}</div></div>
+    <div class="metric-card metric-green"><div class="metric-label">Notes saisies</div><div class="metric-value">${notesSaisies}${enClasse ? ` (${pct(notesSaisies)}%)` : ""}</div></div>
+    <div class="metric-card metric-red"><div class="metric-label">En difficulté</div><div class="metric-value">${enDifficulte}${enClasse ? ` (${pct(enDifficulte)}%)` : ""}</div></div>
+    <div class="metric-card metric-gold"><div class="metric-label">Alertes abs/ret</div><div class="metric-value">${alertesAbsRet}${enClasse ? ` (${pct(alertesAbsRet)}%)` : ""}</div></div>
+    <div class="metric-card metric-lime"><div class="metric-label">Excellents</div><div class="metric-value">${excellents}${enClasse ? ` (${pct(excellents)}%)` : ""}</div></div>
   `;
 
   tableRoot.innerHTML = lignes.map(x => {
@@ -634,13 +822,21 @@ function renderNotesMetriquesEtTable() {
         ${aSuiviAnnee ? `<button class="btn btn-ghost btn-sm" data-notes-annuel="${x.enfant.id}" ${aTel ? "" : "disabled"} title="Envoyer le bulletin annuel"><i class="bi bi-journal-check"></i></button>` : ""}
       </td>
     </tr>`;
-  }).join("");
+  }).join("") + (enClasse && lignes.length > 0 ? `
+    <tr style="font-weight:800;">
+      <td colspan="2">Total classe (${lignes.length} élève${lignes.length > 1 ? "s" : ""})</td>
+      <td></td>
+      <td></td>
+      <td>${totalAbsences}</td>
+      <td>${totalRetards}</td>
+      <td colspan="3">${pct(enDifficulte)}% en difficulté · ${pct(alertesAbsRet)}% en alerte abs/ret · ${pct(excellents)}% excellents</td>
+    </tr>` : "");
 
   tableRoot.querySelectorAll("[data-notes-wa]").forEach(btn => {
     btn.addEventListener("click", () => {
       const enfant = STATE.enfants.find(e => e.id === btn.dataset.notesWa);
       const suivi = STATE.suivi.find(s => s.enfant_id === enfant.id && s.trim === trim);
-      if (enfant && suivi) sendWhatsApp(enfant.tel, buildMessageBulletin(enfant, suivi));
+      if (enfant && suivi) sendWhatsApp(enfant.tel, buildMessageBulletin(enfant, suivi, STATE.postes.filter(p => p.enfant_id === enfant.id)));
     });
   });
 

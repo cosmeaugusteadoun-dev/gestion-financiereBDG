@@ -86,21 +86,21 @@ var CAT_EMOJI_BILAN = {
   "Garderie": "🕒"
 };
 
-// Bilan financier envoyé aux parents : on mentionne d'abord ce qui est déjà
-// réglé (✅), puis uniquement les échéances réellement en retard (⚠️) —
-// jamais les mois à venir qui ne sont pas encore dus, pour ne pas donner
-// une impression de dette qui n'existe pas encore.
-function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
-  const parent = enfant.parent || "cher parent";
-  const section = SECT_LABELS[enfant.sect] || enfant.sect;
+// Bloc "SITUATION FINANCIERE" complet (titre, détail par catégorie, total,
+// rappel des échéances) — bloc autonome réutilisé tel quel par le bilan
+// financier seul (buildBilanMessage) ET par le rapport combiné envoyé
+// depuis Notes & Suivi (buildMessageBulletin) : le rendu financier ne
+// change jamais selon l'endroit d'où il est envoyé.
+// On mentionne d'abord ce qui est déjà réglé (✅), puis uniquement les
+// échéances réellement en retard (⚠️) — jamais les mois à venir qui ne
+// sont pas encore dus, pour ne pas donner une impression de dette qui
+// n'existe pas encore.
+function construireSectionFinanciere(enfant, postesEnfant) {
   const aujourdHui = new Date().toLocaleDateString("fr-FR");
   const DIV = "────────────────────";
 
-  let msg = `Bonjour ${parent},\n\n`;
-  msg += `Veuillez trouver ci-dessous le récapitulatif concernant votre enfant :\n`;
-  msg += `*${enfant.nom}* - ${section}\n${DIV}\n\n`;
-  msg += `💰 *SITUATION FINANCIERE*\n${DIV}\n`;
-  msg += `Voici le détail de votre situation au ${aujourdHui} :\n\n`;
+  let texte = `💰 *SITUATION FINANCIERE*\n${DIV}\n`;
+  texte += `Voici le détail de votre situation au ${aujourdHui} :\n\n`;
 
   let totalRetard = 0;
   let aDesFraisScolarite = false;
@@ -140,33 +140,46 @@ function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
     });
 
     if (blocs.length === 0) return;
-    msg += `${CAT_EMOJI_BILAN[cat] || "•"} *${cat}*\n`;
-    blocs.forEach(b => { msg += `  ${b}\n`; });
-    msg += `\n`;
+    texte += `${CAT_EMOJI_BILAN[cat] || "•"} *${cat}*\n`;
+    blocs.forEach(b => { texte += `  ${b}\n`; });
+    texte += `\n`;
   });
 
   // Remise éventuelle — créditée directement sur les échéances concernées,
   // simplement rappelée ici pour la transparence avec le parent.
   if (enfant.remise > 0) {
-    msg += `🎁 Remise accordée : -${fmtFCFA(enfant.remise)} sur ${enfant.remise_cible || "—"}\n\n`;
+    texte += `🎁 Remise accordée : -${fmtFCFA(enfant.remise)} sur ${enfant.remise_cible || "—"}\n\n`;
   }
 
-  msg += `${DIV}\n`;
-  msg += totalRetard > 0
+  texte += `${DIV}\n`;
+  texte += totalRetard > 0
     ? `*⚠️ TOTAL EN RETARD : ${fmtFCFA(totalRetard)}*\n\n`
     : `*✅ Aucun retard de paiement — merci pour votre régularité !*\n\n`;
 
   // Rappel des échéances de tranches — uniquement pour Maternelle/Primaire
   if (aDesFraisScolarite) {
-    msg += `📅 *Échéances des tranches de scolarité*\n`;
-    msg += `1ère tranche : au plus tard le 19 Octobre\n`;
-    msg += `2ème tranche : au plus tard le 07 Décembre\n`;
-    msg += `3ème tranche : au plus tard le 05 Février\n\n`;
+    texte += `📅 *Échéances des tranches de scolarité*\n`;
+    texte += `1ère tranche : au plus tard le 19 Octobre\n`;
+    texte += `2ème tranche : au plus tard le 07 Décembre\n`;
+    texte += `3ème tranche : au plus tard le 05 Février\n\n`;
   }
 
-  msg += totalRetard > 0
+  texte += totalRetard > 0
     ? `Merci de respecter les délais indiqués ci-dessus. 🙏\n\n`
     : `Merci de continuer à respecter les délais indiqués ci-dessus. 🙏\n\n`;
+
+  return texte;
+}
+
+function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
+  const parent = enfant.parent || "cher parent";
+  const section = SECT_LABELS[enfant.sect] || enfant.sect;
+  const DIV = "────────────────────";
+
+  let msg = `Bonjour ${parent},\n\n`;
+  msg += `Veuillez trouver ci-dessous le récapitulatif concernant votre enfant :\n`;
+  msg += `*${enfant.nom}* - ${section}\n${DIV}\n\n`;
+  msg += construireSectionFinanciere(enfant, postesEnfant);
   msg += `${DIV}\n`;
   msg += `💛🌸 Adorables parents, vous êtes nos meilleurs partenaires !\n`;
   msg += `Nous vous remercions pour votre confiance et votre engagement.\n`;

@@ -81,6 +81,9 @@ CREATE TABLE suivi (
   comportement  TEXT,
   observation   TEXT,
   is_mat        BOOLEAN DEFAULT FALSE,
+  qualites_positives   JSONB DEFAULT '[]',
+  qualites_accompagner JSONB DEFAULT '[]',
+  tranche_age   TEXT,
   UNIQUE(enfant_id, trim)
 );
 
