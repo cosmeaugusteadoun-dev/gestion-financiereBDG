@@ -244,7 +244,10 @@ function initNotes() {
     renderNotesMetriquesEtTable();
   });
 
+  // "Garderie midi" n'est plus une classe proposable (retirée de la
+  // création de dossiers) — on ne la propose pas non plus ici.
   document.getElementById("nClasse").innerHTML = Object.keys(SECT_LABELS)
+    .filter(sect => sect !== "garderie")
     .map(sect => `<option value="${sect}">${escapeHtml(SECT_LABELS[sect])}</option>`).join("");
 
   document.querySelectorAll("#nModeToggle [data-mode]").forEach(btn => {
@@ -783,16 +786,38 @@ function renderNotesMetriquesEtTable() {
   const totalAbsences = lignes.reduce((s, x) => s + (x.suivi?.absences || 0), 0);
   const totalRetards = lignes.reduce((s, x) => s + (x.suivi?.retards || 0), 0);
 
-  // Pourcentages calculés sur l'effectif ciblé (classe ou école entière),
-  // pour évaluer une classe d'un coup d'œil plutôt qu'un chiffre brut isolé.
-  const pct = (n) => lignes.length > 0 ? Math.round((n / lignes.length) * 100) : 0;
+  // Pourcentages calculés par rapport à tout l'établissement (même
+  // trimestre), pas par rapport à l'effectif de la classe : ex. les 12
+  // absences du CE1 représentent X% des absences de toute l'école ce
+  // trimestre-là — pas X% des élèves du CE1.
+  let pctSaisies = 0, pctDifficulte = 0, pctAlertes = 0, pctExcellents = 0, pctAbsences = 0, pctRetards = 0;
+  if (enClasse) {
+    const lignesEcole = STATE.enfants.map(e => ({
+      enfant: e,
+      suivi: STATE.suivi.find(s => s.enfant_id === e.id && s.trim === trim) || null
+    }));
+    const ecoleNotesSaisies = lignesEcole.filter(x => x.suivi).length;
+    const ecoleEnDifficulte = lignesEcole.filter(x => estEnDifficulte(x.suivi)).length;
+    const ecoleAlertesAbsRet = lignesEcole.filter(x => aAlerteAbsRet(x.suivi)).length;
+    const ecoleExcellents = lignesEcole.filter(x => estExcellent(x.suivi)).length;
+    const ecoleTotalAbsences = lignesEcole.reduce((s, x) => s + (x.suivi?.absences || 0), 0);
+    const ecoleTotalRetards = lignesEcole.reduce((s, x) => s + (x.suivi?.retards || 0), 0);
+
+    const pctDe = (n, total) => total > 0 ? Math.round((n / total) * 100) : 0;
+    pctSaisies = pctDe(notesSaisies, ecoleNotesSaisies);
+    pctDifficulte = pctDe(enDifficulte, ecoleEnDifficulte);
+    pctAlertes = pctDe(alertesAbsRet, ecoleAlertesAbsRet);
+    pctExcellents = pctDe(excellents, ecoleExcellents);
+    pctAbsences = pctDe(totalAbsences, ecoleTotalAbsences);
+    pctRetards = pctDe(totalRetards, ecoleTotalRetards);
+  }
 
   metricsRoot.innerHTML = `
     <div class="metric-card metric-navy"><div class="metric-label">${enClasse ? "Élèves de la classe" : "Élèves inscrits"}</div><div class="metric-value">${lignes.length}</div></div>
-    <div class="metric-card metric-green"><div class="metric-label">Notes saisies</div><div class="metric-value">${notesSaisies}${enClasse ? ` (${pct(notesSaisies)}%)` : ""}</div></div>
-    <div class="metric-card metric-red"><div class="metric-label">En difficulté</div><div class="metric-value">${enDifficulte}${enClasse ? ` (${pct(enDifficulte)}%)` : ""}</div></div>
-    <div class="metric-card metric-gold"><div class="metric-label">Alertes abs/ret</div><div class="metric-value">${alertesAbsRet}${enClasse ? ` (${pct(alertesAbsRet)}%)` : ""}</div></div>
-    <div class="metric-card metric-lime"><div class="metric-label">Excellents</div><div class="metric-value">${excellents}${enClasse ? ` (${pct(excellents)}%)` : ""}</div></div>
+    <div class="metric-card metric-green"><div class="metric-label">Notes saisies</div><div class="metric-value">${notesSaisies}${enClasse ? ` (${pctSaisies}% école)` : ""}</div></div>
+    <div class="metric-card metric-red"><div class="metric-label">En difficulté</div><div class="metric-value">${enDifficulte}${enClasse ? ` (${pctDifficulte}% école)` : ""}</div></div>
+    <div class="metric-card metric-gold"><div class="metric-label">Alertes abs/ret</div><div class="metric-value">${alertesAbsRet}${enClasse ? ` (${pctAlertes}% école)` : ""}</div></div>
+    <div class="metric-card metric-lime"><div class="metric-label">Excellents</div><div class="metric-value">${excellents}${enClasse ? ` (${pctExcellents}% école)` : ""}</div></div>
   `;
 
   tableRoot.innerHTML = lignes.map(x => {
@@ -827,9 +852,9 @@ function renderNotesMetriquesEtTable() {
       <td colspan="2">Total classe (${lignes.length} élève${lignes.length > 1 ? "s" : ""})</td>
       <td></td>
       <td></td>
-      <td>${totalAbsences}</td>
-      <td>${totalRetards}</td>
-      <td colspan="3">${pct(enDifficulte)}% en difficulté · ${pct(alertesAbsRet)}% en alerte abs/ret · ${pct(excellents)}% excellents</td>
+      <td>${totalAbsences} (${pctAbsences}% école)</td>
+      <td>${totalRetards} (${pctRetards}% école)</td>
+      <td colspan="3">${pctDifficulte}% des difficultés école · ${pctAlertes}% des alertes abs/ret école · ${pctExcellents}% des excellents école</td>
     </tr>` : "");
 
   tableRoot.querySelectorAll("[data-notes-wa]").forEach(btn => {
