@@ -240,9 +240,11 @@ function renderEnfantItem(e) {
   // Regroupement des postes par catégorie (hors remise, gérée à part)
   // Les services ponctuels de la crèche (halte-garderie, samedi, nuitée)
   // s'affichent regroupés sous "Crèche" plutôt que dans une section à part.
+  // Le goûter (catégorie à part dans les bilans/Entrées/Sorties) reste
+  // affiché regroupé avec la Cantine ici, par choix d'affichage du dossier.
   const categories = {};
   postesEnfant.filter(p => !p.is_remise).forEach(p => {
-    const catAffichage = PONCTUEL_CRECHE_CATS.includes(p.cat) ? "Crèche" : p.cat;
+    const catAffichage = PONCTUEL_CRECHE_CATS.includes(p.cat) ? "Crèche" : p.cat === "Goûter" ? "Cantine" : p.cat;
     if (!categories[catAffichage]) categories[catAffichage] = [];
     categories[catAffichage].push(p);
   });

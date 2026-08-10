@@ -35,17 +35,21 @@ var BILAN_SECTEUR_COULEURS = ["pink", "navy", "green", "gold", "blue", "orange",
 // la même catégorie de poste ("Scolarité") : on les sépare ici en
 // retrouvant la section de l'enfant propriétaire de chaque poste.
 // Secteurs sans "dû" fiable : soit la fréquentation varie mois par mois au
-// gré des familles (Crèche, Cantine, Cantine crèche — un enfant peut y être
-// inscrit un mois et pas le suivant), soit le montant dépend d'achats
+// gré des familles (Crèche, Cantine, Cantine crèche, Goûter — un enfant peut
+// y être inscrit un mois et pas le suivant), soit le montant dépend d'achats
 // ponctuels et variables (Uniformes, Fournitures, Garderie, Halte-Garderie).
 // Dans les deux cas, le "dû" généré ne représente pas une vraie créance : la
 // carte n'affiche que les montants réels (encaissé / sorties / solde net),
 // sans "Total attendu" ni "Reste à recouvrer" ni "Taux de recouvrement".
 var BILAN_SECTEURS_AU_CHOIX = [
-  "Crèche", "Cantine", "Cantine crèche",
+  "Crèche", "Cantine", "Cantine crèche", "Goûter",
   "Uniformes", "Fournitures", "Garderie", "Halte-Garderie"
 ];
 
+// Le goûter est une carte à part ici (Bilan par secteur) et dans
+// Entrées/Sorties, même s'il reste affiché regroupé avec la Cantine dans
+// le dossier de l'enfant (voir enfants.js, catAffichage) — deux vues
+// différentes, deux granularités différentes, par choix explicite.
 var BILAN_CATEGORIES_FIXES = [
   { label: "Crèche",                    match: (p, ef) => p.cat === "Crèche" },
   { label: "Maternelle",                match: (p, ef) => p.cat === "Scolarité" && ef && MAT_SECTS.includes(ef.sect) },
@@ -54,10 +58,9 @@ var BILAN_CATEGORIES_FIXES = [
   { label: "Fêtes scolaires",           match: (p) => p.cat === "Fêtes scolaires" },
   { label: "Assurance",                 match: (p) => p.cat === "Assurance" },
   { label: "APE",                       match: (p) => p.cat === "APE" },
-  // Le goûter (Maternelle) est inclus ici — regroupé sous "Cantine" dès la
-  // génération des postes (voir buildPostes, postes.js).
   { label: "Cantine",                   match: (p) => p.cat === "Cantine" },
   { label: "Cantine crèche",            match: (p) => p.cat === "Cantine crèche" },
+  { label: "Goûter",                    match: (p) => p.cat === "Goûter" },
   { label: "Garderie",                  match: (p) => p.cat === "Garderie" },
   { label: "Uniformes",                 match: (p) => p.cat === "Uniformes" },
   { label: "Fournitures",               match: (p) => p.cat === "Fournitures" },
