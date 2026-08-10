@@ -32,7 +32,15 @@
       </div>
     </div>
     <div class="topbar-actions">
-      <button class="btn-logout" id="btnLogout">Déconnexion</button>
+      <button class="btn btn-ghost topbar-desktop-only" id="btnChangerMdp"><i class="bi bi-key-fill"></i> Changer le mot de passe</button>
+      <button class="btn-logout topbar-desktop-only" id="btnLogout">Déconnexion</button>
+      <div class="topbar-burger-wrap">
+        <button class="topbar-burger" id="btnBurgerMenu" aria-label="Menu" aria-haspopup="true" aria-expanded="false"><i class="bi bi-list"></i></button>
+        <div class="topbar-burger-menu" id="burgerMenu" hidden>
+          <button class="burger-menu-item" id="btnChangerMdpMobile"><i class="bi bi-key-fill"></i> Changer le mot de passe</button>
+          <button class="burger-menu-item burger-menu-item-danger" id="btnLogoutMobile"><i class="bi bi-box-arrow-right"></i> Déconnexion</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -587,18 +595,18 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=19"></script>
-<script src="assets/js/db.js?v=19"></script>
-<script src="assets/js/postes.js?v=19"></script>
-<script src="assets/js/whatsapp.js?v=19"></script>
-<script src="assets/js/enfants.js?v=19"></script>
-<script src="assets/js/entrees.js?v=19"></script>
-<script src="assets/js/sorties.js?v=19"></script>
-<script src="assets/js/dashboard.js?v=19"></script>
-<script src="assets/js/bilans.js?v=19"></script>
-<script src="assets/js/notes.js?v=19"></script>
-<script src="assets/js/app.js?v=19"></script>
-<script src="assets/js/pwa-install.js?v=19"></script>
+<script src="assets/js/config.js?v=22"></script>
+<script src="assets/js/db.js?v=22"></script>
+<script src="assets/js/postes.js?v=22"></script>
+<script src="assets/js/whatsapp.js?v=22"></script>
+<script src="assets/js/enfants.js?v=22"></script>
+<script src="assets/js/entrees.js?v=22"></script>
+<script src="assets/js/sorties.js?v=22"></script>
+<script src="assets/js/dashboard.js?v=22"></script>
+<script src="assets/js/bilans.js?v=22"></script>
+<script src="assets/js/notes.js?v=22"></script>
+<script src="assets/js/app.js?v=22"></script>
+<script src="assets/js/pwa-install.js?v=22"></script>
 <script>
   // Enregistrement du service worker (installation PWA + usage hors-ligne)
   if ("serviceWorker" in navigator) {

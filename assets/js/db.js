@@ -221,3 +221,27 @@ async function dbUpsertSuiviClasse(suiviClasse) {
   const { error } = await supabase.from("suivi_classe").upsert(suiviClasse, { onConflict: "sect,trim" });
   if (error) throw error;
 }
+
+// ============================================================
+// MOT DE PASSE DE CONNEXION (voir "Changer le mot de passe", en-tête)
+// L'empreinte de référence vit dans Supabase (table app_config) pour
+// pouvoir être changée depuis l'application ; APP_PASSWORD_HASH (config.js)
+// ne sert plus que de secours si Supabase est injoignable.
+// ============================================================
+async function dbRecupererHashMotDePasse() {
+  try {
+    const { data, error } = await supabase.from("app_config").select("password_hash").eq("id", "main").single();
+    if (!error && data && data.password_hash) return data.password_hash;
+  } catch (err) {
+    console.error("Impossible de récupérer le mot de passe depuis Supabase, repli sur config.js :", err);
+  }
+  return APP_PASSWORD_HASH;
+}
+
+async function dbChangerMotDePasse(nouveauHash) {
+  const { error } = await supabase.from("app_config").upsert(
+    { id: "main", password_hash: nouveauHash, updated_at: new Date().toISOString() },
+    { onConflict: "id" }
+  );
+  if (error) throw error;
+}

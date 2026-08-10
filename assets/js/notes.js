@@ -335,13 +335,14 @@ function renderNotesForm() {
       <div class="field"><label>Absences non justifiées</label><input type="number" id="nAbsences" min="0" value="${existant.absences ?? 0}"></div>
       <div class="field"><label>Retards répétitifs</label><input type="number" id="nRetards" min="0" value="${existant.retards ?? 0}"></div>
       <div style="grid-column: 1 / -1;" id="nAlerteAbsRet"></div>
+      ${isCreche ? "" : `
       <div class="field">
         <label>Comportement</label>
         <select id="nComportement">
           <option value="">— Choisir —</option>
           ${COMPORTEMENT_OPTIONS.map(c => `<option value="${c}" ${existant.comportement === c ? "selected" : ""}>${c}</option>`).join("")}
         </select>
-      </div>
+      </div>`}
       <div class="field" style="grid-column: 1 / -1;">
         <label>Observation libre</label>
         <textarea id="nObservation" placeholder="Optionnel">${escapeHtml(existant.observation || "")}</textarea>
@@ -531,7 +532,7 @@ async function sauvegarderSuivi(enfant, trim, existant, isMat, isCreche) {
     appreciation: appreciationVal,
     absences: parseInt(document.getElementById("nAbsences").value, 10) || 0,
     retards: parseInt(document.getElementById("nRetards").value, 10) || 0,
-    comportement: document.getElementById("nComportement").value || null,
+    comportement: document.getElementById("nComportement")?.value || null,
     observation: document.getElementById("nObservation").value.trim() || null,
     is_mat: isMat,
     qualites_positives: qualitesPositives,

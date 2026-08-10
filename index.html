@@ -47,8 +47,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js?v=19"></script>
-  <script src="assets/js/pwa-install.js?v=19"></script>
+  <script src="assets/js/config.js?v=22"></script>
+  <script src="assets/js/pwa-install.js?v=22"></script>
   <script>
     // ============================================================
     // Authentification de l'écran de connexion
@@ -155,8 +155,19 @@
           return;
         }
 
+        // Le mot de passe de référence vit dans Supabase (table app_config,
+        // modifiable via "Changer le mot de passe" une fois connecté) —
+        // APP_PASSWORD_HASH (config.js) ne sert que de secours hors-ligne.
+        let hashReference = APP_PASSWORD_HASH;
+        try {
+          const { data, error } = await supabase.from("app_config").select("password_hash").eq("id", "main").single();
+          if (!error && data && data.password_hash) hashReference = data.password_hash;
+        } catch (err) {
+          console.error("Supabase injoignable pour la vérification du mot de passe, repli sur config.js :", err);
+        }
+
         const identifiantValide = identifiant === APP_USERNAME;
-        const motDePasseValide = empreinte === APP_PASSWORD_HASH;
+        const motDePasseValide = empreinte === hashReference;
 
         if (identifiantValide && motDePasseValide) {
           setBlocage({ tentatives: 0, bloqueJusqua: 0 });

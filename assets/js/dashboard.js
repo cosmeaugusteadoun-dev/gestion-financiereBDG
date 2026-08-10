@@ -159,13 +159,13 @@ function renderDerniersPaiements() {
 }
 
 // ============================================================
-// RECETTES PAR SECTEUR (résumé, réutilise bilans.js)
+// RECETTES PAR SECTEUR (résumé, mêmes montants que "Bilan par secteur")
 // ============================================================
 function renderRecettesSecteurDashboard() {
   const root = document.getElementById("dashRecettesSecteur");
   if (!root) return;
 
-  const recettesParSecteur = calculerRecettesParSecteur();
+  const recettesParSecteur = calculerEncaisseParSecteurBilan();
   const entrees = Object.entries(recettesParSecteur).sort((a, b) => b[1] - a[1]);
 
   if (entrees.length === 0) {

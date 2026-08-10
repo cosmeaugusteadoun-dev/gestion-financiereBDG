@@ -124,10 +124,30 @@ function renderBilans() {
   }).join("");
 }
 
+// Encaissé par secteur — exactement le même calcul que les cartes du
+// "Bilan par secteur" (somme des postes.paye par catégorie, via
+// BILAN_CATEGORIES_FIXES), pour que le Tableau de bord affiche des
+// montants cohérents avec cet onglet plutôt que de recompter à partir des
+// libellés de secteur saisis sur chaque entrée (taxonomie différente).
+function calculerEncaisseParSecteurBilan() {
+  const enfantParId = {};
+  STATE.enfants.forEach(e => { enfantParId[e.id] = e; });
+
+  const encaisseParSecteur = {};
+  BILAN_CATEGORIES_FIXES.forEach(entry => {
+    let paye = 0;
+    STATE.postes.forEach(p => {
+      if (p.is_remise || p.key === "avance") return;
+      if (entry.match(p, enfantParId[p.enfant_id])) paye += p.paye || 0;
+    });
+    if (paye > 0) encaisseParSecteur[entry.label] = paye;
+  });
+  return encaisseParSecteur;
+}
+
 // Recettes déclarées par secteur (d'après le(s) secteur(s) coché(s) sur
 // chaque entrée) — un paiement multi-secteurs compte dans chacun d'eux.
-// Réutilisée par le Bilan général, le mini-bilan des Entrées et le
-// Tableau de bord.
+// Réutilisée par le Bilan général et le mini-bilan des Entrées.
 function calculerRecettesParSecteur() {
   const recettesParSecteur = {};
   STATE.entrees.forEach(e => {

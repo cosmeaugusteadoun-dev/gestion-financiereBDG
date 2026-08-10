@@ -97,20 +97,35 @@ CREATE TABLE suivi_classe (
   UNIQUE(sect, trim)
 );
 
+-- Configuration de l'application (empreinte du mot de passe de connexion —
+-- voir "Changer le mot de passe" dans l'en-tête). Initialisée avec
+-- l'empreinte du mot de passe par défaut défini dans config.js.
+CREATE TABLE app_config (
+  id             TEXT PRIMARY KEY,
+  password_hash  TEXT NOT NULL,
+  updated_at     TIMESTAMPTZ DEFAULT now()
+);
+INSERT INTO app_config (id, password_hash)
+VALUES ('main', '6051fc84a7a0d74c225fb18a496b09952da5642e60723ecae543298edd7d82d6');
+
 -- Index utiles pour les recherches fréquentes
 CREATE INDEX idx_postes_enfant   ON postes(enfant_id);
 CREATE INDEX idx_entrees_enfant  ON entrees(enfant_id);
 CREATE INDEX idx_suivi_enfant    ON suivi(enfant_id);
 
 -- Sécurité (accès total, usage solo)
-ALTER TABLE enfants  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE postes   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE entrees  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sorties  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE suivi    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE enfants     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE postes      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE entrees     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sorties     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE suivi       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE suivi_classe ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_config  ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "acces_total" ON enfants  FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "acces_total" ON postes   FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "acces_total" ON entrees  FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "acces_total" ON sorties  FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "acces_total" ON suivi    FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "acces_total" ON enfants      FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "acces_total" ON postes       FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "acces_total" ON entrees      FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "acces_total" ON sorties      FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "acces_total" ON suivi        FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "acces_total" ON suivi_classe FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "acces_total" ON app_config   FOR ALL USING (true) WITH CHECK (true);
