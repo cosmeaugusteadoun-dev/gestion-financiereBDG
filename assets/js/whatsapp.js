@@ -172,11 +172,12 @@ function construireSectionFinanciere(enfant, postesEnfant) {
 }
 
 function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
-  const parent = enfant.parent || "cher parent";
+  const civiliteTxt = enfant.civilite && enfant.civilite !== "—" ? `${enfant.civilite} ` : "";
+  const destinataire = enfant.parent ? `${civiliteTxt}${enfant.parent}` : "cher parent";
   const section = SECT_LABELS[enfant.sect] || enfant.sect;
   const DIV = "────────────────────";
 
-  let msg = `Bonjour ${parent},\n\n`;
+  let msg = `Bonjour ${destinataire},\n\n`;
   msg += `Veuillez trouver ci-dessous le récapitulatif concernant votre enfant :\n`;
   msg += `*${enfant.nom}* - ${section}\n${DIV}\n\n`;
   msg += construireSectionFinanciere(enfant, postesEnfant);
