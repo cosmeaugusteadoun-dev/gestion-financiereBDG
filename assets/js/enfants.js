@@ -6,15 +6,17 @@
 var SERVICE_RULES = {
   creche:   ["cantC", "halte"],
   garderie: ["four"],
-  premat:   ["ptdej", "dej", "gout", "four"],
-  mat1:     ["ptdej", "dej", "gout", "four"],
-  mat2:     ["ptdej", "dej", "gout", "four"],
+  premat:   ["ptdej", "dej", "gout", "gard", "four"],
+  mat1:     ["ptdej", "dej", "gout", "gard", "four"],
+  mat2:     ["ptdej", "dej", "gout", "gard", "four"],
   // Le goûter est réservé à la Maternelle sur la fiche tarifaire officielle
-  ci:       ["ptdej", "dej", "four"],
-  cp:       ["ptdej", "dej", "four"],
-  ce1:      ["ptdej", "dej", "four"],
-  ce2:      ["ptdej", "dej", "four"],
-  cm1:      ["ptdej", "dej", "four"]
+  // La garderie de midi (3 000 F/mois) concerne tous les niveaux de la
+  // Prématernelle au CM1 — différente de la crèche (0 à 3 ans).
+  ci:       ["ptdej", "dej", "gard", "four"],
+  cp:       ["ptdej", "dej", "gard", "four"],
+  ce1:      ["ptdej", "dej", "gard", "four"],
+  ce2:      ["ptdej", "dej", "gard", "four"],
+  cm1:      ["ptdej", "dej", "gard", "four"]
 };
 
 // Enfants dont la fiche est actuellement dépliée (persiste entre les rendus)
@@ -30,6 +32,7 @@ function initials(nom) {
 // ============================================================
 function initEnfants() {
   document.getElementById("fSect").addEventListener("change", updateServiceAvailability);
+  document.getElementById("svcDej").addEventListener("change", updateServiceAvailability);
   document.getElementById("formEnfant").addEventListener("submit", handleCreateEnfant);
   document.getElementById("btnResetEnfant").addEventListener("click", resetEnfantForm);
   document.getElementById("rechEnfant").addEventListener("input", renderEnfantsList);
@@ -51,10 +54,25 @@ function initEnfants() {
 function updateServiceAvailability() {
   const sect = document.getElementById("fSect").value;
   const allowed = SERVICE_RULES[sect] || [];
+  const dejCoche = !!document.getElementById("svcDej")?.checked;
+
   document.querySelectorAll("#fServices .checkbox-item").forEach(item => {
     const svc = item.dataset.svc;
     const input = item.querySelector("input");
     const ok = allowed.includes(svc);
+
+    // La garderie de midi est incluse d'office dès que le Déjeuner est
+    // souscrit (l'enfant reste forcément sur place à midi) : on la coche
+    // et on verrouille la case pour éviter un décochage accidentel tant
+    // que ce lien est actif.
+    if (svc === "gard" && ok && dejCoche) {
+      input.checked = true;
+      input.disabled = true;
+      item.classList.add("checked");
+      item.classList.remove("disabled");
+      return;
+    }
+
     input.disabled = !ok;
     if (!ok) {
       input.checked = false;
@@ -104,6 +122,7 @@ async function handleCreateEnfant(e) {
     ptdej: document.getElementById("svcPtdej").checked ? "oui" : "non",
     dej:   document.getElementById("svcDej").checked ? "oui" : "non",
     gout:  document.getElementById("svcGout").checked ? "oui" : "non",
+    gard:  document.getElementById("svcGard").checked ? "oui" : "non",
     qteTenue: parseInt(document.getElementById("fQteTenue").value, 10) || 0,
     qteSport: parseInt(document.getElementById("fQteSport").value, 10) || 0,
     four:  document.getElementById("svcFour").checked ? "oui" : "non",
@@ -413,6 +432,7 @@ function openEditOptionsModal(enfantId) {
     { key: "ptdej",   label: "Petit-déjeuner" },
     { key: "dej",     label: "Déjeuner" },
     { key: "gout",    label: "Goûter" },
+    { key: "gard",    label: "Garderie midi (3 000 F/mois)" },
     { key: "four",    label: "Fournitures (montant libre)" },
     { key: "cantC",   label: "Cantine crèche" },
     { key: "halte",   label: "Halte-garderie / Samedi / Nuitée" }
@@ -466,6 +486,25 @@ function openEditOptionsModal(enfantId) {
   document.querySelectorAll("[data-svc-edit]").forEach(cb => {
     cb.addEventListener("change", () => cb.closest(".checkbox-item").classList.toggle("checked", cb.checked));
   });
+
+  // La garderie de midi est incluse d'office dès que le Déjeuner est
+  // souscrit — même lien que sur le formulaire de création.
+  const dejEdit = document.querySelector('[data-svc-edit="dej"]');
+  const gardEdit = document.querySelector('[data-svc-edit="gard"]');
+  if (dejEdit && gardEdit) {
+    const appliquerLien = () => {
+      if (dejEdit.checked) {
+        gardEdit.checked = true;
+        gardEdit.disabled = true;
+      } else {
+        gardEdit.disabled = false;
+      }
+      gardEdit.closest(".checkbox-item").classList.toggle("checked", gardEdit.checked);
+      gardEdit.closest(".checkbox-item").classList.toggle("disabled", gardEdit.disabled);
+    };
+    dejEdit.addEventListener("change", appliquerLien);
+    appliquerLien();
+  }
 
   document.getElementById("modalAnnuler").addEventListener("click", closeModal);
   document.getElementById("modalEnregistrer").addEventListener("click", async () => {

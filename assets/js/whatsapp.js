@@ -76,6 +76,11 @@ var ORDRE_CATEGORIES_BILAN = [
 
 var MOIS_ORDRE_BILAN = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
 
+// Postes "frais généraux" — mêmes clés que le seuil de retard du 16
+// septembre dans posteEnRetard (postes.js), utilisées ici pour savoir si
+// le rappel informatif du 14 septembre doit apparaître dans le message.
+var CLES_FRAIS_GENERAUX = ["inscr", "act", "fetes", "assur", "ape"];
+
 // Une petite touche vivante et ludique par secteur — ce message s'adresse
 // aux parents d'enfants de crèche/maternelle/primaire, autant que possible
 // il doit rester chaleureux plutôt que comptable.
@@ -104,6 +109,7 @@ function construireSectionFinanciere(enfant, postesEnfant) {
 
   let totalRetard = 0;
   let aDesFraisScolarite = false;
+  const aDesFraisGeneraux = postesEnfant.some(p => CLES_FRAIS_GENERAUX.includes(p.key));
 
   ORDRE_CATEGORIES_BILAN.forEach(cat => {
     const lignes = postesEnfant
@@ -155,6 +161,13 @@ function construireSectionFinanciere(enfant, postesEnfant) {
   texte += totalRetard > 0
     ? `*⚠️ TOTAL EN RETARD : ${fmtFCFA(totalRetard)}*\n\n`
     : `*✅ Aucun retard de paiement — merci pour votre régularité !*\n\n`;
+
+  // Rappel informatif (pas un impayé) : les frais généraux doivent être
+  // soldés dès l'inscription, au plus tard le 14 septembre.
+  if (aDesFraisGeneraux) {
+    texte += `📌 *Frais généraux (Inscription, Assurance, Activités parascolaires, Fêtes scolaires, APE)*\n`;
+    texte += `À solder au plus tard le 14 Septembre.\n\n`;
+  }
 
   // Rappel des échéances de tranches — uniquement pour Maternelle/Primaire
   if (aDesFraisScolarite) {

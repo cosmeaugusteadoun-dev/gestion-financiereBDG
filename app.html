@@ -177,11 +177,12 @@
               <label class="checkbox-item" data-svc="ptdej"><input type="checkbox" id="svcPtdej"> Petit-déjeuner</label>
               <label class="checkbox-item" data-svc="dej"><input type="checkbox" id="svcDej"> Déjeuner</label>
               <label class="checkbox-item" data-svc="gout"><input type="checkbox" id="svcGout"> Goûter</label>
+              <label class="checkbox-item" data-svc="gard"><input type="checkbox" id="svcGard"> Garderie midi (3 000 F/mois)</label>
               <label class="checkbox-item" data-svc="four"><input type="checkbox" id="svcFour"> Fournitures (montant libre)</label>
               <label class="checkbox-item" data-svc="cantC"><input type="checkbox" id="svcCantC"> Cantine crèche</label>
               <label class="checkbox-item" data-svc="halte"><input type="checkbox" id="svcHalte"> Halte-garderie / Samedi / Nuitée</label>
             </div>
-            <div class="field-hint">Les services non disponibles pour la section choisie sont automatiquement désactivés.</div>
+            <div class="field-hint">Les services non disponibles pour la section choisie sont automatiquement désactivés. La Garderie midi est cochée et verrouillée automatiquement dès que le Déjeuner est souscrit.</div>
           </div>
 
           <div class="field" data-svc-group="unif">
@@ -597,18 +598,18 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=24"></script>
-<script src="assets/js/db.js?v=24"></script>
-<script src="assets/js/postes.js?v=24"></script>
-<script src="assets/js/whatsapp.js?v=24"></script>
-<script src="assets/js/enfants.js?v=24"></script>
-<script src="assets/js/entrees.js?v=24"></script>
-<script src="assets/js/sorties.js?v=24"></script>
-<script src="assets/js/dashboard.js?v=24"></script>
-<script src="assets/js/bilans.js?v=24"></script>
-<script src="assets/js/notes.js?v=24"></script>
-<script src="assets/js/app.js?v=24"></script>
-<script src="assets/js/pwa-install.js?v=24"></script>
+<script src="assets/js/config.js?v=25"></script>
+<script src="assets/js/db.js?v=25"></script>
+<script src="assets/js/postes.js?v=25"></script>
+<script src="assets/js/whatsapp.js?v=25"></script>
+<script src="assets/js/enfants.js?v=25"></script>
+<script src="assets/js/entrees.js?v=25"></script>
+<script src="assets/js/sorties.js?v=25"></script>
+<script src="assets/js/dashboard.js?v=25"></script>
+<script src="assets/js/bilans.js?v=25"></script>
+<script src="assets/js/notes.js?v=25"></script>
+<script src="assets/js/app.js?v=25"></script>
+<script src="assets/js/pwa-install.js?v=25"></script>
 <script>
   // Enregistrement du service worker (installation PWA + usage hors-ligne)
   if ("serviceWorker" in navigator) {

@@ -67,16 +67,24 @@ function handleNomInput() {
 // crèche") : on grise les secteurs qui ne correspondent à aucun de ses
 // postes réels, pour éviter qu'un paiement parte sur la mauvaise case.
 // ============================================================
+// Secteurs toujours cliquables pour un enfant de Maternelle/Primaire, même
+// si le poste correspondant n'existe pas encore (achat d'uniforme ou
+// souscription à la garderie décidés après coup, indépendamment de ce qui
+// a été coché à l'inscription).
+var SECTEURS_TOUJOURS_CLIQUABLES_MAT_PRIM = ["Uniformes", "Garderie"];
+
 function filtrerSecteursSelonEnfant(enfant) {
   const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
   const catsDisponibles = new Set(postesEnfant.map(p => p.cat));
   const keysDisponibles = new Set(postesEnfant.map(p => p.key));
+  const estMatOuPrim = MAT_SECTS.includes(enfant.sect) || PRIM_SECTS.includes(enfant.sect);
 
   document.querySelectorAll("#eSecteurs .checkbox-item").forEach(item => {
     const input = item.querySelector("input");
     const label = input.value;
     let ok;
-    if (SECT_TO_KEY[label]) ok = keysDisponibles.has(SECT_TO_KEY[label]);
+    if (estMatOuPrim && SECTEURS_TOUJOURS_CLIQUABLES_MAT_PRIM.includes(label)) ok = true;
+    else if (SECT_TO_KEY[label]) ok = keysDisponibles.has(SECT_TO_KEY[label]);
     else if (SECT_TO_CAT[label]) ok = SECT_TO_CAT[label].some(cat => catsDisponibles.has(cat));
     else ok = true;
 
@@ -321,7 +329,15 @@ function renderEntreesMetrics() {
 
   const total = STATE.entrees.reduce((s, e) => s + (Number(e.mt) || 0), 0);
   const recettesParSecteur = calculerRecettesParSecteur();
-  const topSecteurs = Object.entries(recettesParSecteur).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  // Inscription, Activités parascolaires et Fêtes scolaires sont presque
+  // toujours réglées ensemble en un seul paiement multi-secteurs ; comme
+  // calculerRecettesParSecteur compte le montant total sous CHAQUE secteur
+  // coché (sans répartition), ces trois-là affichaient des montants faux
+  // (gonflés) ici — on les exclut de ce mini-bilan.
+  const SECTEURS_EXCLUS_MINI_BILAN = ["Inscription", "Activités parascolaires", "Fêtes scolaires"];
+  const topSecteurs = Object.entries(recettesParSecteur)
+    .filter(([sect]) => !SECTEURS_EXCLUS_MINI_BILAN.includes(sect))
+    .sort((a, b) => b[1] - a[1]).slice(0, 3);
 
   const tuilesSecteurs = topSecteurs.map(([sect, mt], i) => {
     const couleurs = ["metric-navy", "metric-lime", "metric-gold"];

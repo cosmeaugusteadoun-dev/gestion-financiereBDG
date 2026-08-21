@@ -121,6 +121,10 @@ function buildPostes(sect, stat, opt) {
     // — seul le dossier de l'enfant continue de l'afficher regroupé avec
     // la Cantine, par choix d'affichage (voir enfants.js, catAffichage).
     if (opt.gout  === "oui") MOIS.forEach(m => p.push({ key:`gout_${m}`,  cat:"Goûter",  label:`Goûter ${m}`,         du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+    // Garderie de midi : automatiquement incluse dès que le Déjeuner est
+    // souscrit (l'enfant reste forcément sur place à midi), et disponible
+    // seule pour les enfants qui apportent leur repas mais restent le midi.
+    if (opt.dej === "oui" || opt.gard === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`, cat:"Garderie", label:`Garderie midi ${m}`, du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
   }
 
   // ── PRIMAIRE (CI → CM1) ─────────────────────────────────────
@@ -138,6 +142,10 @@ function buildPostes(sect, stat, opt) {
     // Le goûter est réservé à la Maternelle sur la fiche tarifaire officielle
     if (opt.ptdej === "oui") MOIS.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
     if (opt.dej   === "oui") MOIS.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+    // Garderie de midi : automatiquement incluse dès que le Déjeuner est
+    // souscrit (l'enfant reste forcément sur place à midi), et disponible
+    // seule pour les enfants qui apportent leur repas mais restent le midi.
+    if (opt.dej === "oui" || opt.gard === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`, cat:"Garderie", label:`Garderie midi ${m}`, du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
   }
 
   // ── UNIFORMES (tous niveaux sauf crèche) ────────────────────
