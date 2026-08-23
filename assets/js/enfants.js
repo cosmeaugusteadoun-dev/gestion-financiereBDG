@@ -164,7 +164,7 @@ function fabriquerPostesEnfant(enfantId, sect, stat, opt) {
     key: p.key, cat: p.cat, label: p.label,
     du: p.du || 0, paye: p.paye || 0,
     mois: p.mois || null, dl: p.dl || null,
-    is_var: !!p.is_var, is_remise: false
+    is_var: !!p.is_var, is_remise: false, is_reduit: !!p.is_reduit
   }));
 }
 
@@ -195,8 +195,13 @@ function reconcilerPostes(enfant, newOpt) {
       id: `${enfant.id}_${np.key}`,
       enfant_id: enfant.id,
       key: np.key, cat: np.cat, label: np.label,
-      du: np.du || 0, mois: np.mois || null, dl: np.dl || null,
-      is_var: !!np.is_var, is_remise: false,
+      // Mois à effectif réduit : le montant est saisi manuellement par
+      // l'administration (voir openEditerMontantReduitModal) — buildPostes
+      // le régénère toujours à 0, donc on préserve la valeur déjà définie
+      // au lieu de l'écraser à chaque modification des options du dossier.
+      du: (np.is_reduit && anc) ? (anc.du || 0) : (np.du || 0),
+      mois: np.mois || null, dl: np.dl || null,
+      is_var: !!np.is_var, is_remise: false, is_reduit: !!np.is_reduit,
       paye: anc ? (anc.paye || 0) : (np.paye || 0)
     });
     delete ancienParKey[np.key];
@@ -259,19 +264,25 @@ function renderEnfantItem(e) {
   // Regroupement des postes par catégorie (hors remise, gérée à part)
   // Les services ponctuels de la crèche (halte-garderie, samedi, nuitée)
   // s'affichent regroupés sous "Crèche" plutôt que dans une section à part.
-  // Le goûter (catégorie à part dans les bilans/Entrées/Sorties) reste
-  // affiché regroupé avec la Cantine ici, par choix d'affichage du dossier.
+  // Le Goûter a sa propre section (comme dans les bilans/Entrées/Sorties) :
+  // le regrouper visuellement avec la Cantine créait un total mensuel
+  // trompeur (le "dû" affiché incluait le goûter alors que les paiements
+  // "Cantine" ne le concernent jamais, donnant l'impression d'un montant
+  // reporté sur le mois suivant qui n'existait pas réellement).
   const categories = {};
   postesEnfant.filter(p => !p.is_remise).forEach(p => {
-    const catAffichage = PONCTUEL_CRECHE_CATS.includes(p.cat) ? "Crèche" : p.cat === "Goûter" ? "Cantine" : p.cat;
+    const catAffichage = PONCTUEL_CRECHE_CATS.includes(p.cat) ? "Crèche" : p.cat;
     if (!categories[catAffichage]) categories[catAffichage] = [];
     categories[catAffichage].push(p);
   });
 
-  // Rendu d'une ligne de poste (montant dû + versé/restant, badge retard)
-  function renderPosteRow(label, du, paye, isVar, retard) {
+  // Rendu d'une ligne de poste (montant dû + versé/restant, badge retard).
+  // posteIdEditable : pour les mois à effectif réduit (Cantine/Goûter/
+  // Cantine crèche de mars, juin, septembre) dont le montant est saisi
+  // manuellement — affiche une icône crayon pour le définir/l'ajuster.
+  function renderPosteRow(label, du, paye, isVar, retard, posteIdEditable) {
     const reste = isVar ? Math.max(-(paye || 0), 0) : Math.max((du || 0) - (paye || 0), 0);
-    const duTxt = isVar ? "Montant libre" : fmtFCFA(du);
+    const duTxt = isVar ? "Montant libre" : (posteIdEditable && !du ? "À définir" : fmtFCFA(du));
 
     // Transparence totale : dès qu'un poste n'est pas soldé, on affiche à la
     // fois ce qui a déjà été versé (en bleu) et ce qu'il reste (en rouge/orange)
@@ -279,6 +290,8 @@ function renderEnfantItem(e) {
     let statutHtml;
     if (isVar) {
       statutHtml = `<span class="text-blue">${fmtFCFA(paye)} versé</span>`;
+    } else if (posteIdEditable && !du) {
+      statutHtml = `<span class="text-muted">Montant non défini</span>`;
     } else if (reste <= 0) {
       statutHtml = `<span class="text-green">Soldé</span>`;
     } else {
@@ -286,9 +299,13 @@ function renderEnfantItem(e) {
       statutHtml = `<span class="text-blue">Versé ${fmtFCFA(paye || 0)}</span> · <span class="${resteClass}">Restant ${fmtFCFA(reste)}</span>`;
     }
 
+    const editBtn = posteIdEditable
+      ? `<button type="button" class="btn-icon-edit-poste" data-editer-montant="${posteIdEditable}" title="Définir le montant"><i class="bi bi-pencil-fill"></i></button>`
+      : "";
+
     return `
       <div class="poste-row">
-        <div class="poste-label">${escapeHtml(label)}${retard ? ' <span class="badge badge-red">retard</span>' : ""}</div>
+        <div class="poste-label">${escapeHtml(label)}${retard ? ' <span class="badge badge-red">retard</span>' : ""}${editBtn}</div>
         <div class="poste-amounts">
           <span class="du">${duTxt}</span>
           <span class="reste">${statutHtml}</span>
@@ -320,11 +337,14 @@ function renderEnfantItem(e) {
         .map(mois => {
           const g = parMois[mois];
           const retard = g.postes.some(p => posteEnRetard(p));
-          return renderPosteRow(`Cantine ${mois}`, g.du, g.paye, false, retard);
+          // Mois à effectif réduit : un seul poste "montant à définir" dans
+          // le groupe — on expose son id pour permettre l'édition manuelle.
+          const posteReduit = g.postes.length === 1 && g.postes[0].is_reduit ? g.postes[0].id : null;
+          return renderPosteRow(`Cantine ${mois}`, g.du, g.paye, false, retard, posteReduit);
         }).join("")
         + horsMois.map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p))).join("");
     } else {
-      lignes = categories[cat].map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p))).join("");
+      lignes = categories[cat].map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p), p.is_reduit ? p.id : null)).join("");
     }
 
     return `<div class="postes-cat"><div class="postes-cat-title">${escapeHtml(cat)}</div>${lignes}</div>`;
@@ -417,6 +437,49 @@ function wireEnfantItemEvents() {
     const suiviEnfant = STATE.suivi.filter(s => s.enfant_id === enfant.id);
     sendWhatsApp(enfant.tel, buildBilanMessage(enfant, postesEnfant, suiviEnfant));
   }));
+  document.querySelectorAll("[data-editer-montant]").forEach(btn => btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    openEditerMontantReduitModal(btn.dataset.editerMontant);
+  }));
+}
+
+// ============================================================
+// MODAL — MONTANT D'UN MOIS À EFFECTIF RÉDUIT (Cantine/Goûter/Cantine
+// crèche de mars, juin, septembre — voir postes.js, MOIS_CANTINE_REDUITS)
+// ============================================================
+function openEditerMontantReduitModal(posteId) {
+  const poste = STATE.postes.find(p => p.id === posteId);
+  if (!poste) return;
+
+  openModal(`
+    <div class="modal-title">Définir le montant — ${escapeHtml(poste.label)}</div>
+    <div class="modal-text">Ce mois a un effectif réduit (rentrée, congés) : le montant dû ne suit pas le tarif plein et se saisit manuellement.</div>
+    <div class="field">
+      <label>Montant dû (F CFA)</label>
+      <input type="number" id="editMontantReduit" min="0" step="500" value="${poste.du || 0}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="modalAnnuler">Annuler</button>
+      <button class="btn btn-primary" id="modalEnregistrer"><i class="bi bi-check-lg"></i> Enregistrer</button>
+    </div>
+  `);
+
+  document.getElementById("modalAnnuler").addEventListener("click", closeModal);
+  document.getElementById("modalEnregistrer").addEventListener("click", async () => {
+    const montant = parseFloat(document.getElementById("editMontantReduit").value) || 0;
+    const ancienDu = poste.du;
+    poste.du = montant;
+    try {
+      await dbUpsertPostes([poste]);
+      closeModal();
+      refreshAllTabs();
+      showToast("Montant mis à jour.", "success");
+    } catch (err) {
+      poste.du = ancienDu;
+      console.error(err);
+      showToast("Erreur lors de la mise à jour : " + err.message, "error");
+    }
+  });
 }
 
 // ============================================================

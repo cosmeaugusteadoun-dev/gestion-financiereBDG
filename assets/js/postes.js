@@ -51,6 +51,14 @@ var SCOL_MAJOREE = ["premat", "cm1"];
 // sous "Crèche" dans le dossier de l'enfant et le bilan WhatsApp.
 var PONCTUEL_CRECHE_CATS = ["Halte-Garderie"];
 
+// Mois à effectif réduit pour la cantine/le goûter : rentrée le 14
+// septembre (l'enfant n'est là que la moitié du mois), deux semaines de
+// congé de Pâques en mars, deux dernières semaines de cours seulement en
+// juin. Le tarif mensuel plein ne s'applique pas — le montant dû est
+// saisi manuellement une fois la fréquentation réelle connue (voir
+// enfants.js, poste "is_reduit").
+var MOIS_CANTINE_REDUITS = ["Mar", "Jun", "Sep"];
+
 // ============================================================
 // GÉNÉRATION DES POSTES FINANCIERS
 // ============================================================
@@ -72,9 +80,14 @@ function buildPostes(sect, stat, opt) {
                du:30000, paye:0, mois:m, dl:moisDlC[m] });
     });
     if (opt.cantC === "oui") {
-      MOIS_CRECHE.forEach(m => {
+      MOIS_CRECHE.filter(m => !MOIS_CANTINE_REDUITS.includes(m)).forEach(m => {
         p.push({ key:`cantc_${m}`, cat:"Cantine crèche", label:`Cantine crèche ${m}`,
                  du:13000, paye:0, mois:m });
+      });
+      MOIS_CANTINE_REDUITS.forEach(m => {
+        p.push({ key:`cantc_reduit_${m}`, cat:"Cantine crèche",
+                 label:`Cantine crèche ${m} (effectif réduit — montant à définir)`,
+                 du:0, paye:0, mois:m, dl:moisDlC[m], is_reduit:true });
       });
     }
     // Halte-garderie, journée du samedi, nuitée : un seul poste combiné —
@@ -115,15 +128,27 @@ function buildPostes(sect, stat, opt) {
     p.push({ key:"fetes", cat:"Fêtes scolaires",         label:"Fêtes scolaires",         du:12000, paye:0, dl:"07/12" });
     p.push({ key:"assur", cat:"Assurance",               label:"Assurance",               du:2000,  paye:0, dl:"19/10" });
     p.push({ key:"ape",   cat:"APE",                     label:"APE",                     du:2500,  paye:0, dl:"19/10" });
-    if (opt.ptdej === "oui") MOIS.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
-    if (opt.dej   === "oui") MOIS.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+    const moisCantinePleins = MOIS.filter(m => !MOIS_CANTINE_REDUITS.includes(m));
+    if (opt.ptdej === "oui" || opt.dej === "oui") {
+      if (opt.ptdej === "oui") moisCantinePleins.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+      if (opt.dej   === "oui") moisCantinePleins.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+      MOIS_CANTINE_REDUITS.forEach(m => p.push({ key:`cantine_reduit_${m}`, cat:"Cantine",
+               label:`Cantine ${m} (effectif réduit — montant à définir)`,
+               du:0, paye:0, mois:m, dl:MOIS_DL_5[m], is_reduit:true }));
+    }
     // Le goûter est une catégorie à part entière (bilans, Entrées, Sorties)
     // — seul le dossier de l'enfant continue de l'afficher regroupé avec
     // la Cantine, par choix d'affichage (voir enfants.js, catAffichage).
-    if (opt.gout  === "oui") MOIS.forEach(m => p.push({ key:`gout_${m}`,  cat:"Goûter",  label:`Goûter ${m}`,         du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+    if (opt.gout === "oui") {
+      moisCantinePleins.forEach(m => p.push({ key:`gout_${m}`, cat:"Goûter", label:`Goûter ${m}`, du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+      MOIS_CANTINE_REDUITS.forEach(m => p.push({ key:`gout_reduit_${m}`, cat:"Goûter",
+               label:`Goûter ${m} (effectif réduit — montant à définir)`,
+               du:0, paye:0, mois:m, dl:MOIS_DL_5[m], is_reduit:true }));
+    }
     // Garderie de midi : automatiquement incluse dès que le Déjeuner est
     // souscrit (l'enfant reste forcément sur place à midi), et disponible
     // seule pour les enfants qui apportent leur repas mais restent le midi.
+    // Contrairement à la cantine, son tarif reste fixe même en mois réduit.
     if (opt.dej === "oui" || opt.gard === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`, cat:"Garderie", label:`Garderie midi ${m}`, du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
   }
 
@@ -140,8 +165,14 @@ function buildPostes(sect, stat, opt) {
     p.push({ key:"assur", cat:"Assurance",               label:"Assurance",               du:2000,  paye:0, dl:"19/10" });
     p.push({ key:"ape",   cat:"APE",                     label:"APE",                     du:2500,  paye:0, dl:"19/10" });
     // Le goûter est réservé à la Maternelle sur la fiche tarifaire officielle
-    if (opt.ptdej === "oui") MOIS.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
-    if (opt.dej   === "oui") MOIS.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+    const moisCantinePleinsPrim = MOIS.filter(m => !MOIS_CANTINE_REDUITS.includes(m));
+    if (opt.ptdej === "oui" || opt.dej === "oui") {
+      if (opt.ptdej === "oui") moisCantinePleinsPrim.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+      if (opt.dej   === "oui") moisCantinePleinsPrim.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+      MOIS_CANTINE_REDUITS.forEach(m => p.push({ key:`cantine_reduit_${m}`, cat:"Cantine",
+               label:`Cantine ${m} (effectif réduit — montant à définir)`,
+               du:0, paye:0, mois:m, dl:MOIS_DL_5[m], is_reduit:true }));
+    }
     // Garderie de midi : automatiquement incluse dès que le Déjeuner est
     // souscrit (l'enfant reste forcément sur place à midi), et disponible
     // seule pour les enfants qui apportent leur repas mais restent le midi.
@@ -306,7 +337,7 @@ function dlPassed(dl) {
 // parents (voir le rappel de tranches dans le bilan WhatsApp) : chaque
 // seuil correspond au lendemain de l'échéance (délai de tolérance d'un
 // jour), sauf la T3 qui bénéficie de 5 jours de tolérance.
-var SEUIL_RETARD_FRAIS_GENERAUX = new Date(2026, 8, 16);  // 16/09/2026
+var SEUIL_RETARD_FRAIS_GENERAUX = new Date(2026, 8, 14);  // 14/09/2026 — jour de la rentrée
 var SEUIL_RETARD_T1 = new Date(2026, 9, 20);               // 20/10/2026
 var SEUIL_RETARD_T2 = new Date(2026, 11, 8);                // 08/12/2026
 var SEUIL_RETARD_T3 = new Date(2027, 1, 10);                 // 10/02/2027
@@ -318,7 +349,8 @@ function posteEnRetard(p) {
   const today = new Date();
 
   // Frais généraux (Inscription, Activités parascolaires, Fêtes scolaires,
-  // Assurance, APE) : retard s'ils ne sont pas soldés avant le 16 septembre.
+  // Assurance, APE) : retard s'ils ne sont pas soldés avant le 14 septembre
+  // (jour de la rentrée).
   if (["inscr", "act", "fetes", "assur", "ape"].includes(p.key)) {
     return today >= SEUIL_RETARD_FRAIS_GENERAUX;
   }

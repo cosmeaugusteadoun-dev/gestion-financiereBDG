@@ -624,6 +624,23 @@ textarea { resize: vertical; min-height: 70px; }
 }
 .btn-icon-danger:hover { color: var(--red); background: var(--red-l); transform: scale(1.06); }
 
+.btn-icon-edit-poste {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 50%;
+  font-size: 11px;
+  vertical-align: middle;
+  transition: color .15s ease, background .15s ease;
+}
+.btn-icon-edit-poste:hover { color: var(--pink); background: var(--pink-l); }
+
 .enfant-body {
   display: none;
   padding: 0 16px 18px;

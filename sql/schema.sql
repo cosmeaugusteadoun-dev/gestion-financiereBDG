@@ -39,7 +39,8 @@ CREATE TABLE postes (
   mois        TEXT,
   dl          TEXT,
   is_var      BOOLEAN DEFAULT FALSE,
-  is_remise   BOOLEAN DEFAULT FALSE
+  is_remise   BOOLEAN DEFAULT FALSE,
+  is_reduit   BOOLEAN DEFAULT FALSE
 );
 
 -- Entrées (paiements reçus)
