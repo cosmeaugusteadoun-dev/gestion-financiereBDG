@@ -231,6 +231,26 @@ function buildAnniversaireMessage(enfant) {
 }
 
 // ============================================================
+// MESSAGE — RAPPEL D'ABONNEMENT CRÈCHE (12 mois glissants)
+// ============================================================
+function buildMessageRenouvellementCreche(enfant, dateRenouvellement) {
+  const civiliteTxt = enfant.civilite && enfant.civilite !== "—" ? `${enfant.civilite} ` : "";
+  const destinataire = enfant.parent ? `${civiliteTxt}${enfant.parent}` : "cher parent";
+  const prenom = (enfant.nom || "").split(" ")[0];
+  const dateTxt = dateRenouvellement.toLocaleDateString("fr-FR");
+
+  let msg = `Bonjour ${destinataire},\n\n`;
+  msg += `📅 *Rappel — Abonnement Crèche de ${prenom}*\n\n`;
+  msg += `L'abonnement annuel (inscription et assurance) de ${prenom} arrive à échéance le *${dateTxt}*.\n\n`;
+  msg += `Nous vous invitons à procéder au renouvellement avant cette date afin que ${prenom} continue de bénéficier de nos services sans interruption.\n\n`;
+  msg += `N'hésitez pas à nous contacter pour toute question.\n\n`;
+  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n`;
+  msg += `📍 Zongo 2, Parakou · 📱 01 97 91 94 52\n`;
+  msg += `_Amour · Travail · Discipline · Créativité_`;
+  return msg;
+}
+
+// ============================================================
 // RENDU — ONGLET WHATSAPP (bilan par enfant)
 // ============================================================
 function renderWhatsAppTab() {

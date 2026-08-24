@@ -109,6 +109,9 @@ async function handleCreateEnfant(e) {
   const parent = document.getElementById("fParent").value.trim();
   const tel = document.getElementById("fTel").value.trim();
   const ddn = document.getElementById("fDdn").value || null;
+  // Utile pour le rappel d'abonnement Crèche (12 mois glissants) : à
+  // défaut de saisie, on prend la date du jour (nouvelle inscription).
+  const dateInscription = document.getElementById("fDateInscription").value || new Date().toISOString().slice(0, 10);
   const annee = document.getElementById("fAnnee").value;
   const remise = parseFloat(document.getElementById("fRemise").value) || 0;
   const remiseCible = document.getElementById("fRemiseCible").value;
@@ -133,7 +136,7 @@ async function handleCreateEnfant(e) {
   };
 
   const id = uid("enf");
-  const enfant = { id, nom, sect, stat, sexe, tel, parent, civilite, ddn, annee, opt, remise, remise_cible: remiseCible };
+  const enfant = { id, nom, sect, stat, sexe, tel, parent, civilite, ddn, date_inscription: dateInscription, annee, opt, remise, remise_cible: remiseCible };
   const postesGeneres = fabriquerPostesEnfant(id, sect, stat, opt);
 
   // La remise est créditée directement sur les postes réels (comme un
@@ -635,6 +638,7 @@ function openEditProfilModal(enfantId) {
       <div class="field"><label>Nom du parent</label><input type="text" id="editParent" value="${escapeHtml(enfant.parent||"")}"></div>
       <div class="field"><label>Téléphone (WhatsApp)</label><input type="tel" id="editTel" value="${escapeHtml(enfant.tel||"")}"></div>
       <div class="field"><label>Date de naissance</label><input type="date" id="editDdn" value="${enfant.ddn||""}"></div>
+      <div class="field"><label>Date d'inscription</label><input type="date" id="editDateInscription" value="${enfant.date_inscription||""}"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="modalAnnuler">Annuler</button>
@@ -650,7 +654,8 @@ function openEditProfilModal(enfantId) {
       civilite: document.getElementById("editCivilite").value,
       parent: document.getElementById("editParent").value.trim(),
       tel: document.getElementById("editTel").value.trim(),
-      ddn: document.getElementById("editDdn").value || null
+      ddn: document.getElementById("editDdn").value || null,
+      date_inscription: document.getElementById("editDateInscription").value || null
     };
     if (!patch.nom) { showToast("Le nom ne peut pas être vide.", "error"); return; }
 

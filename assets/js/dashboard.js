@@ -47,6 +47,7 @@ function renderDashboard() {
   renderRecettesSecteurDashboard();
   renderParentsARelancer();
   renderAnniversaires();
+  renderRenouvellementsCreche();
   renderDerniersPaiements();
 }
 
@@ -129,6 +130,49 @@ function renderAnniversaires() {
     btn.addEventListener("click", () => {
       const enfant = STATE.enfants.find(e => e.id === btn.dataset.anniv);
       sendWhatsApp(enfant.tel, buildAnniversaireMessage(enfant));
+    });
+  });
+}
+
+// ============================================================
+// RENOUVELLEMENTS CRÈCHE — 14 PROCHAINS JOURS
+// L'abonnement Crèche (inscription + assurance) court sur 12 mois
+// glissants à partir de la date réelle d'inscription (voir db.js,
+// prochainRenouvellementCreche) — pas sur l'année scolaire, la crèche
+// accueille toute l'année.
+// ============================================================
+function renderRenouvellementsCreche() {
+  const root = document.getElementById("dashRenouvellementsCreche");
+  if (!root) return;
+
+  const liste = CRECHE_SECTS
+    .reduce((acc, sect) => acc.concat(STATE.enfants.filter(e => e.sect === sect)), [])
+    .map(e => ({ enfant: e, jours: joursAvantRenouvellementCreche(e.date_inscription) }))
+    .filter(x => x.jours !== null && x.jours <= 14)
+    .sort((a, b) => a.jours - b.jours);
+
+  if (liste.length === 0) {
+    root.innerHTML = `<p class="text-muted">Aucun renouvellement d'abonnement Crèche dans les 14 prochains jours.</p>`;
+    return;
+  }
+
+  root.innerHTML = liste.map(x => {
+    const echu = x.jours <= 0;
+    return `
+      <div class="bday-row ${echu ? "bday-today" : ""}">
+        <div>
+          <div class="bday-name">${escapeHtml(x.enfant.nom)} ${echu ? '<span class="badge badge-pink"><i class="bi bi-exclamation-circle-fill"></i> ÉCHU</span>' : ""}</div>
+          <div class="bday-date">${echu ? "Abonnement arrivé à échéance" : `Dans ${x.jours} jour${x.jours > 1 ? "s" : ""}`}</div>
+        </div>
+        <button class="btn btn-whatsapp btn-sm" data-renouv="${x.enfant.id}" ${x.enfant.tel ? "" : "disabled"} title="Envoyer le rappel"><i class="bi bi-whatsapp"></i></button>
+      </div>`;
+  }).join("");
+
+  root.querySelectorAll("[data-renouv]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const enfant = STATE.enfants.find(e => e.id === btn.dataset.renouv);
+      const dateRenouvellement = prochainRenouvellementCreche(enfant.date_inscription);
+      sendWhatsApp(enfant.tel, buildMessageRenouvellementCreche(enfant, dateRenouvellement));
     });
   });
 }

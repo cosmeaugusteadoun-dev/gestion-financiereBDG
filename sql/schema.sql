@@ -20,6 +20,7 @@ CREATE TABLE enfants (
   civilite     TEXT DEFAULT '—',
   sexe         TEXT, -- 'F' ou 'M', laissé vide si non renseigné
   ddn          DATE,
+  date_inscription DATE,
   annee        TEXT DEFAULT '2026-2027',
   opt          JSONB DEFAULT '{}',
   remise       NUMERIC DEFAULT 0,

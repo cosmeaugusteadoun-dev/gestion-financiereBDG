@@ -71,6 +71,38 @@ function ageAns(ddn) {
   return age;
 }
 
+// Prochaine échéance de l'abonnement Crèche (inscription + assurance) :
+// 12 mois glissants à partir de la date d'inscription réelle de l'enfant,
+// et non l'année scolaire — la crèche accueille toute l'année. Avance par
+// pas de 12 mois tant que la date obtenue est déjà passée, pour retomber
+// sur la prochaine échéance future même si l'inscription date de
+// plusieurs années.
+function prochainRenouvellementCreche(dateInscription) {
+  if (!dateInscription) return null;
+  const debut = new Date(dateInscription);
+  if (isNaN(debut.getTime())) return null;
+
+  const auj = new Date();
+  auj.setHours(0, 0, 0, 0);
+
+  const prochain = new Date(debut);
+  prochain.setHours(0, 0, 0, 0);
+  prochain.setFullYear(prochain.getFullYear() + 1);
+  while (prochain < auj) {
+    prochain.setFullYear(prochain.getFullYear() + 1);
+  }
+  return prochain;
+}
+
+// Nombre de jours avant la prochaine échéance d'abonnement Crèche
+function joursAvantRenouvellementCreche(dateInscription) {
+  const prochain = prochainRenouvellementCreche(dateInscription);
+  if (!prochain) return null;
+  const auj = new Date();
+  auj.setHours(0, 0, 0, 0);
+  return Math.round((prochain - auj) / 86400000);
+}
+
 // ---------- Notifications toast ----------
 var toastTimer = null;
 function showToast(message, type = "info") {
