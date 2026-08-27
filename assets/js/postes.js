@@ -185,7 +185,7 @@ function buildPostes(sect, stat, opt) {
   // acheter plusieurs — la tenue scolaire et la tenue de sport se
   // choisissent indépendamment l'une de l'autre.
   if (sect !== "creche") {
-    const prixTenue = MAT_SECTS.includes(sect) ? 8000 : 9000; // Maternelle : 8 000 F · Primaire/Garderie : 9 000 F
+    const prixTenue = MAT_SECTS.includes(sect) ? 8000 : 8500; // Maternelle : 8 000 F · Primaire/Garderie : 8 500 F (baisse tarifaire)
     const qteTenue = parseInt(opt.qteTenue, 10) || 0;
     const qteSport = parseInt(opt.qteSport, 10) || 0;
     if (qteTenue > 0) {
@@ -276,7 +276,9 @@ function imputerPaiement(postes, cat, montant, moisDepart) {
   if (reste > 0) {
     let avance = postes.find(p => p.key === "avance" && p.cat === cat);
     if (!avance) {
-      avance = { key:"avance", cat, label:"Avance / Trop-perçu", du:0, paye:0 };
+      // is_var:true pour un affichage correct ("X versé", pas "0 F / Soldé")
+      // — un surplus n'a pas de "dû" à comparer, voir renderPosteRow.
+      avance = { key:"avance", cat, label:"Avance / Trop-perçu", du:0, paye:0, is_var:true };
       postes.push(avance);
     }
     avance.paye = (avance.paye || 0) + reste;

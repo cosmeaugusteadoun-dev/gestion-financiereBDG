@@ -157,6 +157,15 @@ function construireSectionFinanciere(enfant, postesEnfant) {
     texte += `🎁 Remise accordée : -${fmtFCFA(enfant.remise)} sur ${enfant.remise_cible || "—"}\n\n`;
   }
 
+  // Avance / trop-perçu : uniquement s'il y en a un réellement — jamais de
+  // mention si aucun paiement n'a dépassé le montant dû.
+  const avancePostes = postesEnfant.filter(p => p.key === "avance" && (p.paye || 0) > 0);
+  if (avancePostes.length > 0) {
+    const totalAvance = avancePostes.reduce((s, p) => s + (p.paye || 0), 0);
+    texte += `💚 *Avance / Trop-perçu : ${fmtFCFA(totalAvance)}*\n`;
+    texte += `Ce montant sera automatiquement déduit de vos prochains paiements.\n\n`;
+  }
+
   texte += `${DIV}\n`;
   texte += totalRetard > 0
     ? `*⚠️ TOTAL EN RETARD : ${fmtFCFA(totalRetard)}*\n\n`

@@ -141,7 +141,7 @@ function imputerPaiementTranche(postes, montant, trancheDepart) {
   if (reste > 0) {
     let avance = postes.find(p => p.key === "avance" && p.cat === "Scolarité");
     if (!avance) {
-      avance = { key: "avance", cat: "Scolarité", label: "Avance / Trop-perçu", du: 0, paye: 0 };
+      avance = { key: "avance", cat: "Scolarité", label: "Avance / Trop-perçu", du: 0, paye: 0, is_var: true };
       postes.push(avance);
     }
     avance.paye = (avance.paye || 0) + reste;
@@ -218,7 +218,7 @@ function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart)
     const cibleCat = secteurs[0] || "Général";
     let avance = postes.find(p => p.key === "avance" && p.cat === cibleCat);
     if (!avance) {
-      avance = { key: "avance", cat: cibleCat, label: "Avance / Trop-perçu", du: 0, paye: 0 };
+      avance = { key: "avance", cat: cibleCat, label: "Avance / Trop-perçu", du: 0, paye: 0, is_var: true };
       postes.push(avance);
     }
     avance.paye = (avance.paye || 0) + reste;
@@ -254,6 +254,22 @@ async function handleCreateEntree(e) {
   const enfant = selectedEnfantId
     ? STATE.enfants.find(x => x.id === selectedEnfantId)
     : STATE.enfants.find(x => x.nom.toLowerCase() === nom.toLowerCase());
+
+  // Mois à effectif réduit (mars/juin/septembre) : si le montant n'a pas
+  // encore été défini dans le dossier (icône crayon), on refuse le
+  // paiement plutôt que de le laisser glisser silencieusement sur le mois
+  // suivant (règle du paiement consécutif — la case "à définir" vaut 0 F
+  // dû, donc "déjà soldée" tant que personne n'a fixé le vrai montant).
+  if (enfant && moisDepart && MOIS_CANTINE_REDUITS.includes(moisDepart)) {
+    const postesEnfantCheck = STATE.postes.filter(p => p.enfant_id === enfant.id);
+    const catsCiblees = new Set();
+    secteurs.forEach(sect => { if (SECT_TO_CAT[sect]) SECT_TO_CAT[sect].forEach(c => catsCiblees.add(c)); });
+    const posteNonDefini = postesEnfantCheck.find(p => p.is_reduit && p.mois === moisDepart && catsCiblees.has(p.cat) && !p.du);
+    if (posteNonDefini) {
+      showToast(`Le montant de "${posteNonDefini.label}" n'est pas encore défini. Définissez-le d'abord dans le dossier de l'enfant (icône crayon) avant d'enregistrer ce paiement.`, "error");
+      return;
+    }
+  }
 
   const entree = {
     id: uid("ent"), date, nom, enfant_id: enfant ? enfant.id : null,
@@ -311,10 +327,32 @@ async function handleCreateEntree(e) {
     resetEntreeForm();
     refreshAllTabs();
     showToast(`Paiement de ${fmtFCFA(montant)} enregistré avec succès.${detailCible}`, "success");
+
+    if (enfant) openConfirmerEnvoiBilanModal(enfant);
   } catch (err) {
     console.error(err);
     showToast("Erreur lors de l'enregistrement du paiement : " + err.message, "error");
   }
+}
+
+// Propose d'envoyer le bilan financier à jour par WhatsApp juste après
+// l'enregistrement d'un paiement — évite d'avoir à rouvrir le dossier ou
+// l'onglet WhatsApp pour prévenir le parent.
+function openConfirmerEnvoiBilanModal(enfant) {
+  openModal(`
+    <div class="modal-title">Envoyer le bilan par WhatsApp ?</div>
+    <div class="modal-text">Le paiement de <strong>${escapeHtml(enfant.nom)}</strong> a bien été enregistré. Voulez-vous envoyer le bilan financier à jour au parent sur WhatsApp ?</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="modalNon">Non</button>
+      <button class="btn btn-whatsapp" id="modalOui" ${enfant.tel ? "" : "disabled"} title="${enfant.tel ? "" : "Aucun numéro WhatsApp enregistré"}"><i class="bi bi-whatsapp"></i> Oui, envoyer</button>
+    </div>
+  `);
+  document.getElementById("modalNon").addEventListener("click", closeModal);
+  document.getElementById("modalOui").addEventListener("click", () => {
+    const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
+    sendWhatsApp(enfant.tel, buildBilanMessage(enfant, postesEnfant));
+    closeModal();
+  });
 }
 
 // ============================================================
@@ -364,7 +402,9 @@ function renderEntreesList() {
     return;
   }
 
-  tbody.innerHTML = liste.map(en => `
+  tbody.innerHTML = liste.map(en => {
+    const enfant = en.enfant_id ? STATE.enfants.find(x => x.id === en.enfant_id) : null;
+    return `
     <tr>
       <td>${formatDateFR(en.date)}</td>
       <td>${escapeHtml(en.nom)}</td>
@@ -372,11 +412,25 @@ function renderEntreesList() {
       <td>${TRANCHE_LABELS_ENTREE[en.mois] || en.mois || "—"}</td>
       <td><strong>${fmtFCFA(en.mt)}</strong></td>
       <td>${escapeHtml(en.mode)}</td>
-      <td><button class="btn btn-danger btn-sm" data-del-entree="${en.id}" title="Supprimer"><i class="bi bi-trash"></i></button></td>
-    </tr>`).join("");
+      <td>
+        ${enfant ? `<button class="btn btn-whatsapp btn-sm" data-wa-entree="${en.id}" ${enfant.tel ? "" : "disabled"} title="Envoyer le bilan par WhatsApp"><i class="bi bi-whatsapp"></i></button>` : ""}
+        <button class="btn btn-danger btn-sm" data-del-entree="${en.id}" title="Supprimer"><i class="bi bi-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
 
   tbody.querySelectorAll("[data-del-entree]").forEach(btn => {
     btn.addEventListener("click", () => openDeleteEntreeModal(btn.dataset.delEntree));
+  });
+
+  tbody.querySelectorAll("[data-wa-entree]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const en = STATE.entrees.find(x => x.id === btn.dataset.waEntree);
+      const enfant = en && en.enfant_id ? STATE.enfants.find(x => x.id === en.enfant_id) : null;
+      if (!enfant) return;
+      const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
+      sendWhatsApp(enfant.tel, buildBilanMessage(enfant, postesEnfant));
+    });
   });
 }
 

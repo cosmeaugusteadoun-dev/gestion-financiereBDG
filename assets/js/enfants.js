@@ -238,7 +238,10 @@ function renderEnfantsList() {
 
   let liste = STATE.enfants.filter(e => !recherche || e.nom.toLowerCase().includes(recherche));
   if (filtreSect) liste = liste.filter(e => e.sect === filtreSect);
-  if (filtreStatut) {
+  if (filtreStatut === "scol_solde" || filtreStatut === "scol_impaye") {
+    const cible = filtreStatut === "scol_solde" ? "solde" : "impaye";
+    liste = liste.filter(e => statutScolarite(STATE.postes.filter(p => p.enfant_id === e.id)) === cible);
+  } else if (filtreStatut) {
     liste = liste.filter(e => statutPaiement(STATE.postes.filter(p => p.enfant_id === e.id)) === filtreStatut);
   }
   liste = liste.slice().sort((a, b) => a.nom.localeCompare(b.nom));
@@ -258,6 +261,19 @@ var STATUT_INFO = {
   impaye:  { badge: "badge-red",    icon: "bi-x-circle-fill",           texte: "Impayé" }
 };
 
+// Statut de la Scolarité seule (Inscription + tranches, cat "Scolarité") —
+// distinct du statut global : un enfant peut avoir sa scolarité entièrement
+// soldée tout en ayant un reste sur la cantine, et inversement. Utilisé par
+// les filtres "Scolarité soldée" / "Scolarité impayée" (Dossiers enfants).
+// Retourne null pour un enfant sans poste "Scolarité" (ex. crèche).
+function statutScolarite(postesEnfant) {
+  const lignes = postesEnfant.filter(p => p.cat === "Scolarité" && !p.is_var && !p.is_remise && p.key !== "avance");
+  if (lignes.length === 0) return null;
+  const du = lignes.reduce((s, p) => s + (p.du || 0), 0);
+  const paye = lignes.reduce((s, p) => s + (p.paye || 0), 0);
+  return paye >= du ? "solde" : "impaye";
+}
+
 function renderEnfantItem(e) {
   const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
   const statut = statutPaiement(postesEnfant);
@@ -267,14 +283,14 @@ function renderEnfantItem(e) {
   // Regroupement des postes par catégorie (hors remise, gérée à part)
   // Les services ponctuels de la crèche (halte-garderie, samedi, nuitée)
   // s'affichent regroupés sous "Crèche" plutôt que dans une section à part.
-  // Le Goûter a sa propre section (comme dans les bilans/Entrées/Sorties) :
-  // le regrouper visuellement avec la Cantine créait un total mensuel
-  // trompeur (le "dû" affiché incluait le goûter alors que les paiements
-  // "Cantine" ne le concernent jamais, donnant l'impression d'un montant
-  // reporté sur le mois suivant qui n'existait pas réellement).
+  // La Garderie midi s'affiche regroupée avec la Cantine (même section,
+  // même total) : en pratique elle est toujours payée en même temps
+  // (cochée automatiquement avec le Déjeuner dans Entrées) — contrairement
+  // au Goûter, qui lui reste séparé (voir plus bas) car il peut être payé
+  // indépendamment et créait un total mensuel trompeur une fois regroupé.
   const categories = {};
   postesEnfant.filter(p => !p.is_remise).forEach(p => {
-    const catAffichage = PONCTUEL_CRECHE_CATS.includes(p.cat) ? "Crèche" : p.cat;
+    const catAffichage = PONCTUEL_CRECHE_CATS.includes(p.cat) ? "Crèche" : p.cat === "Garderie" ? "Cantine" : p.cat;
     if (!categories[catAffichage]) categories[catAffichage] = [];
     categories[catAffichage].push(p);
   });
@@ -283,9 +299,9 @@ function renderEnfantItem(e) {
   // posteIdEditable : pour les mois à effectif réduit (Cantine/Goûter/
   // Cantine crèche de mars, juin, septembre) dont le montant est saisi
   // manuellement — affiche une icône crayon pour le définir/l'ajuster.
-  function renderPosteRow(label, du, paye, isVar, retard, posteIdEditable) {
+  function renderPosteRow(label, du, paye, isVar, retard, posteIdEditable, montantNonDefini) {
     const reste = isVar ? Math.max(-(paye || 0), 0) : Math.max((du || 0) - (paye || 0), 0);
-    const duTxt = isVar ? "Montant libre" : (posteIdEditable && !du ? "À définir" : fmtFCFA(du));
+    const duTxt = isVar ? "Montant libre" : (montantNonDefini ? "À définir" : fmtFCFA(du));
 
     // Transparence totale : dès qu'un poste n'est pas soldé, on affiche à la
     // fois ce qui a déjà été versé (en bleu) et ce qu'il reste (en rouge/orange)
@@ -293,7 +309,7 @@ function renderEnfantItem(e) {
     let statutHtml;
     if (isVar) {
       statutHtml = `<span class="text-blue">${fmtFCFA(paye)} versé</span>`;
-    } else if (posteIdEditable && !du) {
+    } else if (montantNonDefini) {
       statutHtml = `<span class="text-muted">Montant non défini</span>`;
     } else if (reste <= 0) {
       statutHtml = `<span class="text-green">Soldé</span>`;
@@ -318,14 +334,32 @@ function renderEnfantItem(e) {
 
   const MOIS_ORDRE_AFFICHAGE = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
 
-  const catsHtml = Object.keys(categories).map(cat => {
+  // Ordre d'affichage des sections du dossier : Scolarité (contient
+  // l'Inscription), Assurance, APE puis Cantine en priorité ; le reste
+  // suit dans un ordre stable. Les catégories absentes de cette liste
+  // (ex. Crèche pour un dossier crèche) s'affichent après, dans leur
+  // ordre d'apparition naturel.
+  const ORDRE_CATEGORIES_DOSSIER = [
+    "Scolarité", "Assurance", "APE", "Cantine",
+    "Activités parascolaires", "Fêtes scolaires", "Goûter",
+    "Crèche", "Cantine crèche", "Halte-Garderie",
+    "Uniformes", "Fournitures"
+  ];
+  const catsOrdonnees = Object.keys(categories).sort((a, b) => {
+    const ia = ORDRE_CATEGORIES_DOSSIER.indexOf(a);
+    const ib = ORDRE_CATEGORIES_DOSSIER.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+
+  const catsHtml = catsOrdonnees.map(cat => {
     let lignes;
 
     if (cat === "Cantine") {
-      // Regroupe Petit-déjeuner + Déjeuner (et toute autre option cantine)
-      // en un seul total mensuel, plus lisible que le détail poste par poste.
-      // Les postes sans mois (ex. une avance mal orientée) restent affichés
-      // individuellement plutôt que d'être regroupés sous un mois "null".
+      // Regroupe Petit-déjeuner + Déjeuner + Garderie midi (et toute autre
+      // option cantine) en un seul total mensuel, plus lisible que le
+      // détail poste par poste. Les postes sans mois (ex. une avance mal
+      // orientée) restent affichés individuellement plutôt que d'être
+      // regroupés sous un mois "null".
       const parMois = {};
       const horsMois = [];
       categories[cat].forEach(p => {
@@ -340,14 +374,18 @@ function renderEnfantItem(e) {
         .map(mois => {
           const g = parMois[mois];
           const retard = g.postes.some(p => posteEnRetard(p));
-          // Mois à effectif réduit : un seul poste "montant à définir" dans
-          // le groupe — on expose son id pour permettre l'édition manuelle.
-          const posteReduit = g.postes.length === 1 && g.postes[0].is_reduit ? g.postes[0].id : null;
-          return renderPosteRow(`Cantine ${mois}`, g.du, g.paye, false, retard, posteReduit);
+          // Mois à effectif réduit : un poste "montant à définir" au sein
+          // du groupe (potentiellement mélangé à la Garderie, toujours à
+          // tarif fixe) — on expose son id pour l'édition manuelle, et on
+          // n'affiche "à définir" que si c'est le seul poste du mois.
+          const posteReduitObj = g.postes.find(p => p.is_reduit);
+          const posteReduit = posteReduitObj ? posteReduitObj.id : null;
+          const montantNonDefini = g.postes.length === 1 && !!posteReduitObj && !posteReduitObj.du;
+          return renderPosteRow(`Cantine ${mois}`, g.du, g.paye, false, retard, posteReduit, montantNonDefini);
         }).join("")
         + horsMois.map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p))).join("");
     } else {
-      lignes = categories[cat].map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p), p.is_reduit ? p.id : null)).join("");
+      lignes = categories[cat].map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p), p.is_reduit ? p.id : null, p.is_reduit && !p.du)).join("");
     }
 
     return `<div class="postes-cat"><div class="postes-cat-title">${escapeHtml(cat)}</div>${lignes}</div>`;
@@ -511,7 +549,7 @@ function openEditOptionsModal(enfantId) {
     </label>`).join("");
 
   const uniformesOk = enfant.sect !== "creche";
-  const prixTenueInfo = MAT_SECTS.includes(enfant.sect) ? "8 000 F/unité" : "9 000 F/unité";
+  const prixTenueInfo = MAT_SECTS.includes(enfant.sect) ? "8 000 F/unité" : "8 500 F/unité";
 
   openModal(`
     <div class="modal-title">Modifier les options — ${escapeHtml(enfant.nom)}</div>

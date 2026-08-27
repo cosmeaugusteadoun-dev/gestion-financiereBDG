@@ -198,7 +198,7 @@
           <div class="field" data-svc-group="unif">
             <label>Tenues scolaires — nombre à acheter</label>
             <input type="number" id="fQteTenue" min="0" step="1" value="0">
-            <div class="field-hint">9 000 F/unité (Primaire) · 8 000 F/unité (Maternelle) — laisser à 0 si l'ancienne tenue est réutilisée.</div>
+            <div class="field-hint">8 500 F/unité (Primaire) · 8 000 F/unité (Maternelle) — laisser à 0 si l'ancienne tenue est réutilisée.</div>
           </div>
           <div class="field" data-svc-group="unif">
             <label>Tenues de sport — nombre à acheter</label>
@@ -247,6 +247,8 @@
           <option value="solde">Soldé</option>
           <option value="partiel">Partiel</option>
           <option value="impaye">Impayé</option>
+          <option value="scol_solde">Scolarité soldée</option>
+          <option value="scol_impaye">Scolarité impayée</option>
         </select>
       </div>
 
@@ -608,18 +610,18 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=27"></script>
-<script src="assets/js/db.js?v=27"></script>
-<script src="assets/js/postes.js?v=27"></script>
-<script src="assets/js/whatsapp.js?v=27"></script>
-<script src="assets/js/enfants.js?v=27"></script>
-<script src="assets/js/entrees.js?v=27"></script>
-<script src="assets/js/sorties.js?v=27"></script>
-<script src="assets/js/dashboard.js?v=27"></script>
-<script src="assets/js/bilans.js?v=27"></script>
-<script src="assets/js/notes.js?v=27"></script>
-<script src="assets/js/app.js?v=27"></script>
-<script src="assets/js/pwa-install.js?v=27"></script>
+<script src="assets/js/config.js?v=28"></script>
+<script src="assets/js/db.js?v=28"></script>
+<script src="assets/js/postes.js?v=28"></script>
+<script src="assets/js/whatsapp.js?v=28"></script>
+<script src="assets/js/enfants.js?v=28"></script>
+<script src="assets/js/entrees.js?v=28"></script>
+<script src="assets/js/sorties.js?v=28"></script>
+<script src="assets/js/dashboard.js?v=28"></script>
+<script src="assets/js/bilans.js?v=28"></script>
+<script src="assets/js/notes.js?v=28"></script>
+<script src="assets/js/app.js?v=28"></script>
+<script src="assets/js/pwa-install.js?v=28"></script>
 <script>
   // Enregistrement du service worker (installation PWA + usage hors-ligne)
   if ("serviceWorker" in navigator) {
