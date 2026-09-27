@@ -28,6 +28,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   try {
     await loadAll();
+    if (typeof synchroniserEtReparerDossiers === "function") {
+      await synchroniserEtReparerDossiers();
+    }
   } catch (err) {
     console.error(err);
     showToast("Impossible de charger les données. Vérifiez la configuration Supabase dans config.js.", "error");

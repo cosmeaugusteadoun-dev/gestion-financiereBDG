@@ -68,8 +68,8 @@ function buildPostes(sect, stat, opt) {
 
   // ── CRÈCHE (bébés 2 mois → 2 ans) ─────────────────────────
   if (sect === "creche") {
-    p.push({ key:"inscr",   cat:"Crèche",  label:"Inscription annuelle",  du:15000, paye:0, dl:"19/10" });
-    p.push({ key:"assur",   cat:"Crèche",  label:"Assurance annuelle",    du:3000,  paye:0, dl:"19/10" });
+    p.push({ key:"inscr",   cat:"Inscription",  label:"Inscription annuelle",  du:15000, paye:0, dl:"19/10" });
+    p.push({ key:"assur",   cat:"Assurance",    label:"Assurance annuelle",    du:3000,  paye:0, dl:"19/10" });
     const moisDlC = {
       "Sep":"05/09","Oct":"05/10","Nov":"05/11","Déc":"05/12",
       "Jan":"05/01","Fév":"05/02","Mar":"05/03","Avr":"05/04",
@@ -180,19 +180,25 @@ function buildPostes(sect, stat, opt) {
   }
 
   // ── UNIFORMES (tous niveaux sauf crèche) ────────────────────
-  // Tarif fixe à l'unité, mais quantité libre : un ancien élève peut
-  // réutiliser sa tenue de l'an passé (0 acheté), un nouveau peut en
-  // acheter plusieurs — la tenue scolaire et la tenue de sport se
-  // choisissent indépendamment l'une de l'autre.
+  // Montant libre saisi manuellement (tissu complet, demi-tissu, haut seul, bas seul...)
   if (sect !== "creche") {
-    const prixTenue = MAT_SECTS.includes(sect) ? 8000 : 8500; // Maternelle : 8 000 F · Primaire/Garderie : 8 500 F (baisse tarifaire)
+    const montantUnif = parseFloat(opt.montantUnif) || 0;
     const qteTenue = parseInt(opt.qteTenue, 10) || 0;
     const qteSport = parseInt(opt.qteSport, 10) || 0;
-    if (qteTenue > 0) {
-      p.push({ key:"unif_tenue", cat:"Uniformes", label:`Tenue scolaire ×${qteTenue} (${fmtFCFA(prixTenue)}/unité)`, du:prixTenue * qteTenue, paye:0 });
-    }
-    if (qteSport > 0) {
-      p.push({ key:"unif_sport", cat:"Uniformes", label:`Tenue de sport ×${qteSport} (4 000 F/unité)`, du:4000 * qteSport, paye:0 });
+
+    if (montantUnif > 0) {
+      p.push({ key:"unif", cat:"Uniformes", label:"Uniforme", du:montantUnif, paye:0 });
+    } else if (opt.unif === "oui") {
+      p.push({ key:"unif", cat:"Uniformes", label:"Uniforme", du:0, paye:0, is_var:true });
+    } else if (qteTenue > 0 || qteSport > 0) {
+      // Rétrocompatibilité dossiers existants avec quantités
+      const prixTenue = MAT_SECTS.includes(sect) ? 8000 : 8500;
+      if (qteTenue > 0) {
+        p.push({ key:"unif_tenue", cat:"Uniformes", label:`Tenue scolaire ×${qteTenue} (${fmtFCFA(prixTenue)}/unité)`, du:prixTenue * qteTenue, paye:0 });
+      }
+      if (qteSport > 0) {
+        p.push({ key:"unif_sport", cat:"Uniformes", label:`Tenue de sport ×${qteSport} (4 000 F/unité)`, du:4000 * qteSport, paye:0 });
+      }
     }
   }
 
@@ -246,9 +252,17 @@ function imputerPaiement(postes, cat, montant, moisDepart) {
   const idxDepart = moisDepart ? MOIS_ORD.indexOf(moisDepart) : 0;
   const allocations = [];
 
+  // Pour la Crèche : ne jamais imputer Inscription (inscr) ni Assurance (assur)
+  // lors d'un versement mensuel de Crèche (elles ont leurs propres secteurs)
   const cibles = postes
-    .filter(p => p.cat === cat && !p.is_var && !p.is_remise && p.key !== "avance")
+    .filter(p => p.cat === cat && !p.is_var && !p.is_remise && p.key !== "avance" && (cat !== "Crèche" || (p.key !== "inscr" && p.key !== "assur")))
     .sort((a, b) => {
+      if (cat === "Scolarité") {
+        const SCOL_ORD = ["inscr", "t1", "t2", "t3"];
+        const ai = SCOL_ORD.indexOf(a.key);
+        const bi = SCOL_ORD.indexOf(b.key);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+      }
       const ai = a.mois ? MOIS_ORD.indexOf(a.mois) : -1;
       const bi = b.mois ? MOIS_ORD.indexOf(b.mois) : -1;
       return ai - bi;
@@ -297,6 +311,25 @@ function imputerPaiement(postes, cat, montant, moisDepart) {
 // elle est modifiée ou supprimée plus tard (voir reconcilerPostes).
 function appliquerRemise(postes, cat, montant) {
   if (!montant || montant <= 0 || !cat) return [];
+  // Remise sur Scolarité : s'impute directement sur les tranches de scolarité
+  if (cat === "Scolarité") {
+    const tranches = postes.filter(p => p.cat === "Scolarité" && ["t1", "t2", "t3"].includes(p.key));
+    if (tranches.length > 0) {
+      let resteRemise = montant;
+      const allocs = [];
+      tranches.forEach(p => {
+        if (resteRemise <= 0) return;
+        const manque = (p.du || 0) - (p.paye || 0);
+        if (manque > 0) {
+          const v = Math.min(resteRemise, manque);
+          p.paye = (p.paye || 0) + v;
+          allocs.push({ poste: p, montant: v });
+          resteRemise -= v;
+        }
+      });
+      return allocs;
+    }
+  }
   return imputerPaiement(postes, cat, montant, null);
 }
 
@@ -316,13 +349,28 @@ function tReste(postes) {
   return Math.max(tDu(postes) - tPaye(postes) - tRemise(postes), 0);
 }
 
-// Statut global de paiement d'un enfant : solde / partiel / impaye
+// Statut global de paiement d'un enfant : solde / a_jour / partiel / impaye
 function statutPaiement(postes) {
-  const reste = tReste(postes);
+  if (!postes || postes.length === 0) return "impaye";
+  const du = tDu(postes);
   const paye = tPaye(postes);
-  if (reste <= 0) return "solde";
-  if (paye > 0) return "partiel";
-  return "impaye";
+  const reste = tReste(postes);
+
+  // Si aucun montant dû n'est défini et rien n'a été payé : dossier non configuré, jamais "soldé"
+  if (du <= 0 && paye <= 0) return "impaye";
+
+  // Si la totalité du montant dû annuel est entièrement soldée
+  if (du > 0 && reste <= 0) return "solde";
+
+  // Si l'enfant n'a rien payé
+  if (paye <= 0) return "impaye";
+
+  // Si l'enfant a déjà payé et n'a AUCUN poste échue en retard
+  // (ex. tous les frais généraux de rentrée sont réglés, en attente des prochaines tranches) : À jour
+  if (!enfantEnRetard(postes)) return "a_jour";
+
+  // Sinon, une ou plusieurs échéances échues accusent un retard
+  return "partiel";
 }
 
 // ============================================================

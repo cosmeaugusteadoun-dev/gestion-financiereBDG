@@ -40,6 +40,14 @@ function initEnfants() {
   document.getElementById("filtreStatutPaiement").addEventListener("change", renderEnfantsList);
   document.getElementById("btnExportCsv").addEventListener("click", exportEnfantsCsv);
 
+  // Bouton flottant permanent retour en haut
+  const btnScrollTop = document.getElementById("btnScrollTop");
+  if (btnScrollTop) {
+    btnScrollTop.addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
   // Style visuel des cases à cocher (classe .checked)
   document.querySelectorAll("#fServices input[type=checkbox]").forEach(cb => {
     cb.addEventListener("change", () => cb.closest(".checkbox-item").classList.toggle("checked", cb.checked));
@@ -55,16 +63,31 @@ function updateServiceAvailability() {
   const sect = document.getElementById("fSect").value;
   const allowed = SERVICE_RULES[sect] || [];
   const dejCoche = !!document.getElementById("svcDej")?.checked;
+  const estCreche = sect === "creche";
+
+  // Date d'inscription : concerne UNIQUEMENT la Crèche
+  const wrapDate = document.getElementById("wrapDateInscription");
+  if (wrapDate) {
+    wrapDate.style.display = estCreche ? "block" : "none";
+    const inputDate = document.getElementById("fDateInscription");
+    if (inputDate && !estCreche) inputDate.value = "";
+  }
+
+  // Uniformes : montant libre, disponible pour tous les niveaux SAUF la Crèche
+  const wrapUnif = document.getElementById("wrapUnif");
+  if (wrapUnif) {
+    wrapUnif.style.display = (sect && !estCreche) ? "block" : "none";
+    const inputUnif = document.getElementById("fMontantUnif");
+    if (inputUnif && (!sect || estCreche)) inputUnif.value = 0;
+  }
 
   document.querySelectorAll("#fServices .checkbox-item").forEach(item => {
     const svc = item.dataset.svc;
     const input = item.querySelector("input");
-    const ok = allowed.includes(svc);
+    // Pour la Crèche : pas de fournitures (ni d'uniforme)
+    const ok = allowed.includes(svc) && !(estCreche && svc === "four");
 
-    // La garderie de midi est incluse d'office dès que le Déjeuner est
-    // souscrit (l'enfant reste forcément sur place à midi) : on la coche
-    // et on verrouille la case pour éviter un décochage accidentel tant
-    // que ce lien est actif.
+    // La garderie de midi est incluse d'office dès que le Déjeuner est souscrit
     if (svc === "gard" && ok && dejCoche) {
       input.checked = true;
       input.disabled = true;
@@ -79,13 +102,6 @@ function updateServiceAvailability() {
       item.classList.remove("checked");
     }
     item.classList.toggle("disabled", !ok);
-  });
-
-  // Uniformes : tarif fixe à la quantité, disponible pour tous les niveaux sauf la crèche
-  const uniformesOk = sect !== "" && sect !== "creche";
-  document.querySelectorAll('[data-svc-group="unif"] input').forEach(input => {
-    input.disabled = !uniformesOk;
-    if (!uniformesOk) input.value = 0;
   });
 }
 
@@ -109,9 +125,10 @@ async function handleCreateEnfant(e) {
   const parent = document.getElementById("fParent").value.trim();
   const tel = document.getElementById("fTel").value.trim();
   const ddn = document.getElementById("fDdn").value || null;
-  // Utile pour le rappel d'abonnement Crèche (12 mois glissants) : à
-  // défaut de saisie, on prend la date du jour (nouvelle inscription).
-  const dateInscription = document.getElementById("fDateInscription").value || new Date().toISOString().slice(0, 10);
+  // La date d'inscription ne concerne que la Crèche (12 mois glissants)
+  const dateInscription = sect === "creche"
+    ? (document.getElementById("fDateInscription").value || new Date().toISOString().slice(0, 10))
+    : null;
   const annee = document.getElementById("fAnnee").value;
   const remise = parseFloat(document.getElementById("fRemise").value) || 0;
   const remiseCible = document.getElementById("fRemiseCible").value;
@@ -121,16 +138,19 @@ async function handleCreateEnfant(e) {
     return;
   }
 
+  // Uniforme : montant libre à saisir manuellement (sauf Crèche)
+  const montantUnif = (sect !== "creche") ? (parseFloat(document.getElementById("fMontantUnif")?.value) || 0) : 0;
+
   const opt = {
     ptdej: document.getElementById("svcPtdej").checked ? "oui" : "non",
     dej:   document.getElementById("svcDej").checked ? "oui" : "non",
     gout:  document.getElementById("svcGout").checked ? "oui" : "non",
     gard:  document.getElementById("svcGard").checked ? "oui" : "non",
-    qteTenue: parseInt(document.getElementById("fQteTenue").value, 10) || 0,
-    qteSport: parseInt(document.getElementById("fQteSport").value, 10) || 0,
-    four:  document.getElementById("svcFour").checked ? "oui" : "non",
-    cantC: document.getElementById("svcCantC").checked ? "oui" : "non",
-    halte:    document.getElementById("svcHalte").checked ? "oui" : "non",
+    montantUnif: montantUnif,
+    unif: montantUnif > 0 ? "oui" : "non",
+    four: (sect !== "creche" && document.getElementById("svcFour").checked) ? "oui" : "non",
+    cantC: (sect === "creche" && document.getElementById("svcCantC").checked) ? "oui" : "non",
+    halte: (sect === "creche" && document.getElementById("svcHalte").checked) ? "oui" : "non",
     remise: remise > 0 ? remise : 0,
     remiseCible
   };
@@ -257,6 +277,7 @@ function renderEnfantsList() {
 
 var STATUT_INFO = {
   solde:   { badge: "badge-green",  icon: "bi-check-circle-fill",       texte: "Soldé" },
+  a_jour:  { badge: "badge-green",  icon: "bi-check-circle-fill",       texte: "À jour" },
   partiel: { badge: "badge-orange", icon: "bi-exclamation-circle-fill", texte: "Partiel" },
   impaye:  { badge: "badge-red",    icon: "bi-x-circle-fill",           texte: "Impayé" }
 };
@@ -277,7 +298,7 @@ function statutScolarite(postesEnfant) {
 function renderEnfantItem(e) {
   const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
   const statut = statutPaiement(postesEnfant);
-  const info = STATUT_INFO[statut];
+  const info = STATUT_INFO[statut] || STATUT_INFO.impaye;
   const isOpen = openIds.has(e.id);
 
   // Regroupement des postes par catégorie (hors remise, gérée à part)
@@ -334,16 +355,14 @@ function renderEnfantItem(e) {
 
   const MOIS_ORDRE_AFFICHAGE = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
 
-  // Ordre d'affichage des sections du dossier : Scolarité (contient
-  // l'Inscription), Assurance, APE puis Cantine en priorité ; le reste
-  // suit dans un ordre stable. Les catégories absentes de cette liste
-  // (ex. Crèche pour un dossier crèche) s'affichent après, dans leur
-  // ordre d'apparition naturel.
+  // Ordre d'affichage des catégories : Inscription, Scolarité, Assurance, APE,
+  // Activités, Fêtes, Goûter, Crèche, Uniformes, Fournitures, et Cantine EN BAS.
   const ORDRE_CATEGORIES_DOSSIER = [
-    "Scolarité", "Assurance", "APE", "Cantine",
+    "Inscription", "Scolarité", "Assurance", "APE",
     "Activités parascolaires", "Fêtes scolaires", "Goûter",
-    "Crèche", "Cantine crèche", "Halte-Garderie",
-    "Uniformes", "Fournitures"
+    "Crèche", "Halte-Garderie",
+    "Uniformes", "Fournitures",
+    "Cantine", "Cantine crèche"
   ];
   const catsOrdonnees = Object.keys(categories).sort((a, b) => {
     const ia = ORDRE_CATEGORIES_DOSSIER.indexOf(a);
@@ -549,24 +568,18 @@ function openEditOptionsModal(enfantId) {
     </label>`).join("");
 
   const uniformesOk = enfant.sect !== "creche";
-  const prixTenueInfo = MAT_SECTS.includes(enfant.sect) ? "8 000 F/unité" : "8 500 F/unité";
+  const unifPoste = STATE.postes.find(p => p.enfant_id === enfant.id && p.cat === "Uniformes" && !p.is_var && p.key !== "avance");
+  const montantUnifVal = opt.montantUnif !== undefined ? opt.montantUnif : (unifPoste ? (unifPoste.du || 0) : 0);
 
   openModal(`
     <div class="modal-title">Modifier les options — ${escapeHtml(enfant.nom)}</div>
     <div class="modal-text">Les paiements déjà enregistrés sont conservés même si un service est désactivé.</div>
     <div class="checkbox-grid">${checkboxesHtml || '<p class="text-muted">Aucun service optionnel pour cette section.</p>'}</div>
     ${uniformesOk ? `
-    <div class="form-grid mt-2">
-      <div class="field">
-        <label>Tenues scolaires — nombre</label>
-        <input type="number" id="editQteTenue" min="0" step="1" value="${opt.qteTenue || 0}">
-        <div class="field-hint">${prixTenueInfo}</div>
-      </div>
-      <div class="field">
-        <label>Tenues de sport — nombre</label>
-        <input type="number" id="editQteSport" min="0" step="1" value="${opt.qteSport || 0}">
-        <div class="field-hint">4 000 F/unité</div>
-      </div>
+    <div class="field mt-2">
+      <label>Montant uniforme (F CFA)</label>
+      <input type="number" id="editMontantUnif" min="0" step="500" value="${montantUnifVal}" placeholder="0 F CFA (montant libre)">
+      <div class="field-hint">Montant libre à saisir manuellement (tissu complet, demi-tissu, tenue...). Laisser à 0 si aucun uniforme.</div>
     </div>` : ""}
     <div class="form-grid mt-2">
       <div class="field">
@@ -578,6 +591,7 @@ function openEditOptionsModal(enfantId) {
         <select id="editRemiseCible">
           <option value="Cantine" ${(opt.remiseCible||enfant.remise_cible)==="Cantine"?"selected":""}>Mensualité cantine</option>
           <option value="Crèche" ${(opt.remiseCible||enfant.remise_cible)==="Crèche"?"selected":""}>Mensualité crèche</option>
+          <option value="Scolarité" ${(opt.remiseCible||enfant.remise_cible)==="Scolarité"?"selected":""}>Scolarité</option>
         </select>
       </div>
     </div>
@@ -618,11 +632,12 @@ function openEditOptionsModal(enfantId) {
       newOpt[s.key] = cb.checked ? "oui" : "non";
     });
     if (uniformesOk) {
-      newOpt.qteTenue = parseInt(document.getElementById("editQteTenue").value, 10) || 0;
-      newOpt.qteSport = parseInt(document.getElementById("editQteSport").value, 10) || 0;
+      const mUnif = parseFloat(document.getElementById("editMontantUnif")?.value) || 0;
+      newOpt.montantUnif = mUnif;
+      newOpt.unif = mUnif > 0 ? "oui" : "non";
     } else {
-      newOpt.qteTenue = 0;
-      newOpt.qteSport = 0;
+      newOpt.montantUnif = 0;
+      newOpt.unif = "non";
     }
     const remise = parseFloat(document.getElementById("editRemise").value) || 0;
     const remiseCible = document.getElementById("editRemiseCible").value;
@@ -651,7 +666,10 @@ function openEditOptionsModal(enfantId) {
 // ============================================================
 // MODAL — MODIFIER LE PROFIL (sans supprimer le dossier)
 // ============================================================
-function openEditProfilModal(enfantId) {
+// `champCible` (optionnel) : nom court du champ à mettre en évidence à
+// l'ouverture (ex. "ddn" pour la date de naissance) — utilisé par le
+// tableau de bord pour compléter un dossier en quelques secondes.
+function openEditProfilModal(enfantId, champCible) {
   const enfant = STATE.enfants.find(e => e.id === enfantId);
   if (!enfant) return;
 
@@ -676,13 +694,28 @@ function openEditProfilModal(enfantId) {
       <div class="field"><label>Nom du parent</label><input type="text" id="editParent" value="${escapeHtml(enfant.parent||"")}"></div>
       <div class="field"><label>Téléphone (WhatsApp)</label><input type="tel" id="editTel" value="${escapeHtml(enfant.tel||"")}"></div>
       <div class="field"><label>Date de naissance</label><input type="date" id="editDdn" value="${enfant.ddn||""}"></div>
-      <div class="field"><label>Date d'inscription</label><input type="date" id="editDateInscription" value="${enfant.date_inscription||""}"></div>
+      <div class="field" ${enfant.sect !== "creche" ? 'style="display:none;"' : ""}><label>Date d'inscription <span class="text-muted">(Crèche uniquement)</span></label><input type="date" id="editDateInscription" value="${enfant.date_inscription||""}"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="modalAnnuler">Annuler</button>
       <button class="btn btn-primary" id="modalEnregistrer"><i class="bi bi-check-lg"></i> Enregistrer</button>
     </div>
   `);
+
+  // Ciblage direct d'un champ (ex. bouton « Modifier » du tableau de bord
+  // pour saisir une date de naissance manquante) : le champ est mis en
+  // évidence, centré à l'écran et le curseur y est placé immédiatement.
+  if (champCible) {
+    const idChamp = "edit" + champCible.charAt(0).toUpperCase() + champCible.slice(1);
+    const champ = document.getElementById(idChamp);
+    if (champ) {
+      champ.classList.add("champ-cible");
+      requestAnimationFrame(() => {
+        champ.scrollIntoView({ behavior: "smooth", block: "center" });
+        champ.focus({ preventScroll: true });
+      });
+    }
+  }
 
   document.getElementById("modalAnnuler").addEventListener("click", closeModal);
   document.getElementById("modalEnregistrer").addEventListener("click", async () => {
@@ -693,7 +726,7 @@ function openEditProfilModal(enfantId) {
       parent: document.getElementById("editParent").value.trim(),
       tel: document.getElementById("editTel").value.trim(),
       ddn: document.getElementById("editDdn").value || null,
-      date_inscription: document.getElementById("editDateInscription").value || null
+      date_inscription: enfant.sect === "creche" ? (document.getElementById("editDateInscription").value || null) : null
     };
     if (!patch.nom) { showToast("Le nom ne peut pas être vide.", "error"); return; }
 
@@ -758,27 +791,146 @@ window.addEventListener("afterprint", () => {
 });
 
 // ============================================================
-// EXPORT CSV
+// EXPORT CSV ENRICHI (Bilan général + Bilans secteurs + Élèves)
 // ============================================================
 function exportEnfantsCsv() {
-  if (STATE.enfants.length === 0) {
-    showToast("Aucun dossier à exporter.", "error");
+  if (STATE.enfants.length === 0 && STATE.entrees.length === 0) {
+    showToast("Aucune donnée à exporter.", "error");
     return;
   }
-  const lignes = [["Nom", "Section", "Statut", "Total dû", "Total payé", "Reste à payer", "Statut paiement"]];
+
+  const lignes = [];
+
+  // --- 1. BILAN FINANCIER GÉNÉRAL DE L'ÉCOLE ---
+  const totalEntrees = STATE.entrees.reduce((s, e) => s + (Number(e.mt) || 0), 0);
+  const totalSorties = STATE.sorties.reduce((s, x) => s + (Number(x.mt) || 0), 0);
+  const soldeNetGeneral = totalEntrees - totalSorties;
+  const totalDu = STATE.enfants.reduce((s, e) => s + tDu(STATE.postes.filter(p => p.enfant_id === e.id)), 0);
+  const totalPaye = STATE.enfants.reduce((s, e) => s + tPaye(STATE.postes.filter(p => p.enfant_id === e.id)), 0);
+  const totalReste = STATE.enfants.reduce((s, e) => s + tReste(STATE.postes.filter(p => p.enfant_id === e.id)), 0);
+  const tauxRecouvrement = totalDu > 0 ? Math.round((totalPaye / totalDu) * 100) : 0;
+
+  lignes.push(["=== BILAN FINANCIER GENERAL DE L'ECOLE (2026-2027) ==="]);
+  lignes.push(["Indicateur", "Montant (F CFA)"]);
+  lignes.push(["Total entrees encaissees", totalEntrees]);
+  lignes.push(["Total depenses (sorties)", totalSorties]);
+  lignes.push(["Resultat net de l'ecole", soldeNetGeneral]);
+  lignes.push(["Creances familles (reste a recouvrer)", totalReste]);
+  lignes.push(["Resultat net previsionnel", soldeNetGeneral + totalReste]);
+  lignes.push(["Taux de recouvrement", `${tauxRecouvrement}%`]);
+  lignes.push([]);
+
+  // --- 2. BILANS PAR SECTION & SECTEUR ---
+  lignes.push(["=== BILANS PAR SECTION ET SECTEUR ==="]);
+  lignes.push(["Section / Secteur", "Entrees encaissees", "Sorties imputees", "Solde net", "Total attendu", "Reste a recouvrer"]);
+
+  const enfantParId = {};
+  STATE.enfants.forEach(e => { enfantParId[e.id] = e; });
+  const sortiesParSecteur = {};
+  STATE.sorties.forEach(s => {
+    const sect = s.secteur || "Administratif / Divers";
+    sortiesParSecteur[sect] = (sortiesParSecteur[sect] || 0) + (Number(s.mt) || 0);
+  });
+
+  BILAN_CATEGORIES_FIXES.forEach(catEntry => {
+    let du = 0, paye = 0;
+    STATE.postes.forEach(p => {
+      if (p.is_remise || p.key === "avance") return;
+      if (catEntry.match(p, enfantParId[p.enfant_id])) {
+        du += p.du || 0;
+        paye += p.paye || 0;
+      }
+    });
+    const sorties = sortiesParSecteur[catEntry.label] || 0;
+    const soldeNet = paye - sorties;
+    const auChoix = BILAN_SECTEURS_AU_CHOIX.includes(catEntry.label);
+    const reste = auChoix ? "—" : Math.max(du - paye, 0);
+    const duTxt = auChoix ? "—" : du;
+
+    lignes.push([catEntry.label, paye, sorties, soldeNet, duTxt, reste]);
+  });
+
+  const autresSorties = sortiesParSecteur["Administratif / Divers"] || 0;
+  if (autresSorties > 0) {
+    lignes.push(["Administratif / Divers", 0, autresSorties, -autresSorties, "—", "—"]);
+  }
+  lignes.push([]);
+
+  // --- 3. SYNTHÈSE DES DOSSIERS ÉLÈVES ---
+  lignes.push(["=== SYNTHESE DES DOSSIERS ELEVES ==="]);
+  lignes.push(["Nom eleve", "Section", "Statut", "Total du", "Total paye", "Reste a payer", "Statut paiement"]);
+
   STATE.enfants.slice().sort((a, b) => a.nom.localeCompare(b.nom)).forEach(e => {
     const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
+    const st = statutPaiement(postesEnfant);
+    const stLabel = STATUT_INFO[st]?.texte || st;
     lignes.push([
-      e.nom, SECT_LABELS[e.sect] || e.sect, e.stat === "nouveau" ? "Nouveau" : "Ancien",
-      tDu(postesEnfant), tPaye(postesEnfant), tReste(postesEnfant), statutPaiement(postesEnfant)
+      e.nom,
+      SECT_LABELS[e.sect] || e.sect,
+      e.stat === "nouveau" ? "Nouveau" : "Ancien",
+      tDu(postesEnfant),
+      tPaye(postesEnfant),
+      tReste(postesEnfant),
+      stLabel
     ]);
   });
-  const csv = lignes.map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+
+  const csv = lignes.map(l => (l.length === 0 ? "" : l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";"))).join("\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `bulles-de-joie-eleves-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `bulles-de-joie-bilan-et-eleves-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+  showToast("Export CSV généré avec succès.", "success");
 }
+
+// ============================================================
+// AUTO-RÉPARATION & SYNCHRONISATION DES DOSSIERS
+// ============================================================
+// Régularise automatiquement les dossiers sans postes ou les versements
+// d'inscription qui n'avaient pas été crédités sur le poste 'inscr'.
+async function synchroniserEtReparerDossiers() {
+  let modifs = false;
+  const postesAMettreAJour = [];
+
+  for (const enfant of STATE.enfants) {
+    let postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
+
+    // 1. Régénération des postes pour les dossiers vides (évite le faux statut "Soldé")
+    if (postesEnfant.length === 0) {
+      console.warn(`Régénération des postes financiers pour ${enfant.nom}`);
+      const nouveaux = fabriquerPostesEnfant(enfant.id, enfant.sect, enfant.stat, enfant.opt || {});
+      STATE.postes.push(...nouveaux);
+      postesAMettreAJour.push(...nouveaux);
+      postesEnfant = nouveaux;
+      modifs = true;
+    }
+
+    // 2. Régularisation des inscriptions enregistrées mais restant à 0 versé
+    const entreesInscr = STATE.entrees.filter(en => en.enfant_id === enfant.id && (
+      (en.sect || "").includes("Inscription") ||
+      (en.note || "").toLowerCase().includes("inscription") ||
+      (en.note || "").toLowerCase().includes("réinscription")
+    ));
+    const totalInscrEntrees = entreesInscr.reduce((s, en) => s + (Number(en.mt) || 0), 0);
+    const posteInscr = postesEnfant.find(p => p.key === "inscr");
+
+    if (posteInscr && totalInscrEntrees > 0 && (posteInscr.paye || 0) < Math.min(posteInscr.du, totalInscrEntrees)) {
+      console.log(`Régularisation inscription pour ${enfant.nom} : ${totalInscrEntrees} F CFA`);
+      posteInscr.paye = Math.min(posteInscr.du, totalInscrEntrees);
+      postesAMettreAJour.push(posteInscr);
+      modifs = true;
+    }
+  }
+
+  if (modifs && postesAMettreAJour.length > 0) {
+    try {
+      await dbUpsertPostes(postesAMettreAJour);
+    } catch (err) {
+      console.error("Erreur de synchronisation automatique :", err);
+    }
+  }
+}
+

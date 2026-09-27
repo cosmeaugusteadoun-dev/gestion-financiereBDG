@@ -374,6 +374,8 @@ i[class^="bi-"], i[class*=" bi-"] {
 .card-title i.text-orange { color: var(--orange); }
 .card-title i.text-green { color: var(--green); }
 .card-title i.text-gold { color: var(--gold); }
+/* Badge de compteur poussé à droite du titre de carte */
+.card-title .badge { margin-left: auto; }
 
 /* ---------- Grille de métriques (tableau de bord) ---------- */
 .metrics-grid {
@@ -768,6 +770,29 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .bday-name { font-weight: 700; font-size: 13px; }
 .bday-date { font-size: 12px; color: var(--muted); }
 
+/* ---------- Enfants sans date de naissance (tableau de bord) ---------- */
+.ddn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--orange-l);
+  margin-bottom: 8px;
+}
+.ddn-infos { flex: 1; min-width: 0; }
+.ddn-actions { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
+
+/* Champ mis en évidence quand on ouvre le profil depuis le tableau de bord
+   (« Modifier » d'un enfant sans date de naissance) */
+.champ-cible { animation: champCible 1.4s ease-in-out 3; }
+@keyframes champCible {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 81, 0, 0); }
+  50%      { box-shadow: 0 0 0 3px rgba(230, 81, 0, .38); }
+}
+
 /* ============================================================
    MODALS (fenêtres de confirmation / édition)
    ============================================================ */
@@ -1131,3 +1156,86 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 @media (min-width: 821px) {
   .pwa-install-banner { display: none; }
 }
+
+/* ============================================================
+   BOUTON FLOTTANT RETOUR EN HAUT (permanent)
+   ============================================================ */
+.btn-scroll-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 990;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--pink);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 14px rgba(229, 0, 125, 0.35), 0 2px 6px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.btn-scroll-top:hover {
+  background: var(--pink2);
+  transform: translateY(-3px) scale(1.06);
+  box-shadow: 0 6px 18px rgba(229, 0, 125, 0.45), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+.btn-scroll-top:active {
+  transform: translateY(0) scale(0.95);
+}
+
+/* ============================================================
+   ASSISTANT ENVOI GROUPÉ WHATSAPP (onglet Messagerie)
+   ============================================================ */
+.envoi-groupe-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.envoi-groupe-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--gray);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.envoi-groupe-list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+.envoi-groupe-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-size: 13px;
+  transition: background .12s ease;
+}
+.envoi-groupe-item.envoye {
+  background: var(--green-l);
+  border-color: rgba(12, 163, 12, 0.25);
+}
+.envoi-groupe-item-nom {
+  font-weight: 600;
+  color: var(--navy);
+}
+.envoi-groupe-item-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+

@@ -328,29 +328,28 @@ async function handleCreateEntree(e) {
     refreshAllTabs();
     showToast(`Paiement de ${fmtFCFA(montant)} enregistré avec succès.${detailCible}`, "success");
 
-    if (enfant) openConfirmerEnvoiBilanModal(enfant);
+    if (enfant) openConfirmerEnvoiRecuModal(enfant, entree);
   } catch (err) {
     console.error(err);
     showToast("Erreur lors de l'enregistrement du paiement : " + err.message, "error");
   }
 }
 
-// Propose d'envoyer le bilan financier à jour par WhatsApp juste après
-// l'enregistrement d'un paiement — évite d'avoir à rouvrir le dossier ou
-// l'onglet WhatsApp pour prévenir le parent.
-function openConfirmerEnvoiBilanModal(enfant) {
+// Propose d'envoyer le reçu de versement par WhatsApp juste après
+// l'enregistrement d'un paiement — envoi uniquement du reçu de ce paiement
+function openConfirmerEnvoiRecuModal(enfant, entree) {
   openModal(`
-    <div class="modal-title">Envoyer le bilan par WhatsApp ?</div>
-    <div class="modal-text">Le paiement de <strong>${escapeHtml(enfant.nom)}</strong> a bien été enregistré. Voulez-vous envoyer le bilan financier à jour au parent sur WhatsApp ?</div>
+    <div class="modal-title">Envoyer le reçu par WhatsApp ?</div>
+    <div class="modal-text">Le paiement de <strong>${escapeHtml(enfant.nom)}</strong> (${fmtFCFA(entree.mt)}) a bien été enregistré. Voulez-vous envoyer le reçu de versement au parent sur WhatsApp ?</div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="modalNon">Non</button>
-      <button class="btn btn-whatsapp" id="modalOui" ${enfant.tel ? "" : "disabled"} title="${enfant.tel ? "" : "Aucun numéro WhatsApp enregistré"}"><i class="bi bi-whatsapp"></i> Oui, envoyer</button>
+      <button class="btn btn-whatsapp" id="modalOui" ${enfant.tel ? "" : "disabled"} title="${enfant.tel ? "" : "Aucun numéro WhatsApp enregistré"}"><i class="bi bi-whatsapp"></i> Oui, envoyer le reçu</button>
     </div>
   `);
   document.getElementById("modalNon").addEventListener("click", closeModal);
   document.getElementById("modalOui").addEventListener("click", () => {
     const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
-    sendWhatsApp(enfant.tel, buildBilanMessage(enfant, postesEnfant));
+    sendWhatsApp(enfant.tel, buildReceiptMessage(enfant, entree, postesEnfant));
     closeModal();
   });
 }
@@ -413,7 +412,7 @@ function renderEntreesList() {
       <td><strong>${fmtFCFA(en.mt)}</strong></td>
       <td>${escapeHtml(en.mode)}</td>
       <td>
-        ${enfant ? `<button class="btn btn-whatsapp btn-sm" data-wa-entree="${en.id}" ${enfant.tel ? "" : "disabled"} title="Envoyer le bilan par WhatsApp"><i class="bi bi-whatsapp"></i></button>` : ""}
+        ${enfant ? `<button class="btn btn-whatsapp btn-sm" data-wa-entree="${en.id}" ${enfant.tel ? "" : "disabled"} title="Envoyer le reçu de paiement par WhatsApp"><i class="bi bi-whatsapp"></i></button>` : ""}
         <button class="btn btn-danger btn-sm" data-del-entree="${en.id}" title="Supprimer"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`;
@@ -429,7 +428,7 @@ function renderEntreesList() {
       const enfant = en && en.enfant_id ? STATE.enfants.find(x => x.id === en.enfant_id) : null;
       if (!enfant) return;
       const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
-      sendWhatsApp(enfant.tel, buildBilanMessage(enfant, postesEnfant));
+      sendWhatsApp(enfant.tel, buildReceiptMessage(enfant, en, postesEnfant));
     });
   });
 }

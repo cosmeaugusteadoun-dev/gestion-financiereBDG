@@ -45,6 +45,7 @@ function renderDashboard() {
   renderChartsBloc("dashCharts");
   renderAlertesRetard();
   renderRecettesSecteurDashboard();
+  renderSansDateNaissance();
   renderParentsARelancer();
   renderAnniversaires();
   renderRenouvellementsCreche();
@@ -220,6 +221,56 @@ function renderRecettesSecteurDashboard() {
   root.innerHTML = entrees.map(([sect, mt]) => `
     <div class="poste-row"><div class="poste-label">${escapeHtml(sect)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>
   `).join("");
+}
+
+// ============================================================
+// SANS DATE DE NAISSANCE — dossiers à compléter
+// Sans date de naissance, ni l'âge ni l'anniversaire ne peuvent être
+// calculés : on liste ces enfants avec un accès direct au dossier
+// complet ou au formulaire de profil (champ « Date de naissance » ciblé).
+// ============================================================
+function renderSansDateNaissance() {
+  const root = document.getElementById("dashSansDdn");
+  const badge = document.getElementById("dashSansDdnBadge");
+  if (!root) return;
+
+  const manquants = STATE.enfants
+    .filter(e => !e.ddn)
+    .sort((a, b) => (a.nom || "").localeCompare(b.nom || "", "fr", { sensitivity: "base" }));
+
+  if (badge) {
+    badge.textContent = manquants.length;
+    badge.className = "badge " + (manquants.length === 0 ? "badge-green" : "badge-orange");
+  }
+
+  if (STATE.enfants.length === 0) {
+    root.innerHTML = `<p class="text-muted">Aucun dossier enfant enregistré pour le moment.</p>`;
+    return;
+  }
+
+  if (manquants.length === 0) {
+    root.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Tous les dossiers ont une date de naissance renseignée.</div>`;
+    return;
+  }
+
+  root.innerHTML = manquants.map(e => `
+    <div class="ddn-row">
+      <div class="ddn-infos">
+        <div class="bday-name">${escapeHtml(e.nom)}</div>
+        <div class="bday-date">${escapeHtml(SECT_LABELS[e.sect] || e.sect || "—")}</div>
+      </div>
+      <div class="ddn-actions">
+        <button class="btn btn-ghost btn-sm" data-ddn-dossier="${e.id}" title="Ouvrir le dossier complet"><i class="bi bi-folder2-open"></i> Dossier</button>
+        <button class="btn btn-primary btn-sm" data-ddn-modifier="${e.id}" title="Saisir la date de naissance"><i class="bi bi-pencil-fill"></i> Modifier</button>
+      </div>
+    </div>`).join("");
+
+  root.querySelectorAll("[data-ddn-dossier]").forEach(btn => {
+    btn.addEventListener("click", () => verFicheEnfant(btn.dataset.ddnDossier));
+  });
+  root.querySelectorAll("[data-ddn-modifier]").forEach(btn => {
+    btn.addEventListener("click", () => openEditProfilModal(btn.dataset.ddnModifier, "ddn"));
+  });
 }
 
 // ============================================================
