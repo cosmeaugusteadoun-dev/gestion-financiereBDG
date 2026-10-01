@@ -26,41 +26,205 @@ function sendWhatsApp(tel, message) {
 }
 
 // ============================================================
-// MESSAGE — REÇU DE PAIEMENT (automatique après une entrée)
+// REÇU DE PAIEMENT (envoyé juste après l'enregistrement d'une entrée)
+// Trois modèles selon l'objet réel du versement :
+//   • CANTINE   — point du mois payé + rappel de l'échéance du mois suivant.
+//                  La cantine est facultative et se règle mois par mois :
+//                  elle n'entre donc jamais dans un « solde global ».
+//   • SCOLARITÉ — point global de la scolarité (frais généraux + tranches)
+//                  accompagné des dates d'échéance.
+//   • AUTRE     — simple accusé de réception (uniforme, fournitures,
+//                  garderie, activités, fêtes, APE, inscription...).
 // ============================================================
-function buildReceiptMessage(enfant, entree, postesEnfant, secteurs) {
-  const civiliteTxt = enfant.civilite && enfant.civilite !== "—" ? enfant.civilite : "";
-  const prenom = (enfant.nom || "").split(" ")[0];
+var WA_SEP = "━━━━━━━━━━━━━━";
+var WA_SITE = "lesbullesdejoie-benin.com";
+var WA_TEL = "01 97 91 94 52";
+var WA_SIGNATURE = "Amour · Travail · Discipline · Créativité";
 
-  const lignes = (secteurs || []).map(sect => {
-    let reste = 0;
-    if (SECT_TO_KEY[sect]) {
-      const poste = postesEnfant.find(p => p.key === SECT_TO_KEY[sect]);
-      reste = poste ? Math.max((poste.du || 0) - (poste.paye || 0), 0) : 0;
-    } else if (SECT_TO_CAT[sect]) {
-      const cats = SECT_TO_CAT[sect];
-      reste = postesEnfant
-        .filter(p => cats.includes(p.cat) && !p.is_remise && !p.is_var && p.key !== "avance")
-        .reduce((s, p) => s + Math.max((p.du || 0) - (p.paye || 0), 0), 0);
-    }
-    return `  • ${sect} → *${fmtFCFA(reste)} restant*`;
-  }).join("\n");
+// Titre du reçu hors cantine/scolarité — libellé au singulier
+// (« reçu · UNIFORME », « reçu · FOURNITURE »...)
+var WA_TITRE_SECTEUR = {
+  "Uniformes": "UNIFORME", "Fournitures": "FOURNITURE", "Garderie": "GARDERIE",
+  "Halte-Garderie": "HALTE-GARDERIE", "Goûter": "GOÛTER", "Crèche": "CRÈCHE",
+  "Cantine crèche": "CANTINE CRÈCHE", "Activités parascolaires": "ACTIVITÉS PARASCOLAIRES",
+  "Fêtes scolaires": "FÊTES SCOLAIRES", "Assurance": "ASSURANCE", "APE": "APE",
+  "Inscription": "INSCRIPTION"
+};
 
-  const totalReste = tReste(postesEnfant);
+var MOIS_ORDRE_RECUE = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
+var MOIS_LONG_RECUE = {
+  "Jan":"janvier", "Fév":"février", "Mar":"mars",   "Avr":"avril",
+  "Mai":"mai",     "Jun":"juin",    "Jul":"juillet","Aoû":"août",
+  "Sep":"septembre","Oct":"octobre","Nov":"novembre","Déc":"décembre"
+};
+var MOIS_NUM_RECUE = {
+  "Jan":1,"Fév":2,"Mar":3,"Avr":4,"Mai":5,"Jun":6,"Jul":7,"Aoû":8,
+  "Sep":9,"Oct":10,"Nov":11,"Déc":12
+};
+var TRANCHE_LABELS_RECUE = { t1: "1ère tranche", t2: "2ème tranche", t3: "3ème tranche" };
 
-  let msg = `Bonjour ${civiliteTxt} ${enfant.parent || ""} 👋,\n\n`.replace(/ {2,}/g, " ");
-  msg += `Nous avons bien reçu votre paiement de *${fmtFCFA(entree.mt)}* pour *${prenom}*. Merci !\n`;
-  msg += `📅 ${formatDateFR(entree.date)} · 💳 ${entree.mode}\n\n`;
-  msg += `📊 *Voici où en est le compte de ${prenom} :*\n\n`;
-  msg += lignes ? `${lignes}\n\n` : "\n";
-  msg += `💡 Solde global à régulariser : *${fmtFCFA(totalReste)}*\n\n`;
-  msg += `Avec toute notre gratitude,\n`;
-  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n`;
-  msg += `📍 Zongo 2, Parakou · 📱 01 97 91 94 52\n`;
-  msg += `_Amour · Travail · Discipline · Créativité_`;
-  return msg;
+// Montant court pour les lignes de détail (« 12 000 F », sans « CFA »).
+// Même normalisation que fmtFCFA (db.js) : l'espace fine insécable que produit
+// toLocaleString("fr-FR") est remplacée par une espace normale, sinon le
+// montant affiché dans le message diffère de tous les autres.
+function montantCourt(n) {
+  return Math.round(Number(n) || 0).toLocaleString("fr-FR").replace(/ /g, " ") + " F";
 }
 
+// Première lettre en capitale (« octobre » -> « Octobre »)
+function capitaleFR(txt) {
+  return txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : txt;
+}
+
+// Échéance d'un poste (« 05/10 ») complétée par l'année scolaire (sept. 2026 → août 2027)
+function echeanceAvecAnnee(dl) {
+  if (!dl) return "";
+  const parts = String(dl).split("/").map(Number);
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return dl;
+  return `${String(parts[0]).padStart(2, "0")}/${String(parts[1]).padStart(2, "0")}/${parts[1] >= 9 ? 2026 : 2027}`;
+}
+
+// Échéance de la cantine : le 5 du mois. Certains postes n'ont pas de date en
+// base (cantine crèche des mois pleins) — on applique la règle générale.
+function echeanceCantine(mois, dl) {
+  if (dl) return echeanceAvecAnnee(dl);
+  const m = MOIS_NUM_RECUE[mois];
+  if (!m) return "";
+  return `05/${String(m).padStart(2, "0")}/${m >= 9 ? 2026 : 2027}`;
+}
+
+// Mois scolaire en cours (hors septembre → août, on repart de septembre)
+function moisScolaireCourant() {
+  const num = new Date().getMonth() + 1;
+  return Object.keys(MOIS_NUM_RECUE).find(k => MOIS_NUM_RECUE[k] === num) || "Sep";
+}
+
+// Pied de page commun à tous les reçus
+function piedRecuWA(enfant) {
+  const civiliteTxt = enfant.civilite && enfant.civilite !== "—" ? `${enfant.civilite} ` : "";
+  const qui = enfant.parent ? `${civiliteTxt}${enfant.parent}` : (enfant.nom || "");
+  return `Merci ${qui} 🙏\n💛 Les Bulles de Joie 🫧🌸\n📍 Zongo 2, Parakou\n🌐 ${WA_SITE}\n📱 Secrétariat : ${WA_TEL}\n${WA_SIGNATURE}`;
+}
+
+// En-tête commun : titre, élève, classe, montant, date et mode de paiement.
+// `separateurFinal` = false pour un reçu sans corps (article seul) : la
+// séparation est déjà ajoutée par buildReceiptMessage, inutile d'en mettre deux.
+function enteteRecu(titre, enfant, montantRecu, dateMode, ligneAffectation, separateurFinal) {
+  let t = `🫧 REÇU · ${titre} 🫧\n${WA_SEP}\n`;
+  t += `👤 Élève : ${enfant.nom || "—"}\n`;
+  t += `🏫 Classe : ${SECT_LABELS[enfant.sect] || enfant.sect || "—"}\n`;
+  t += `💰 Montant reçu : ${montantRecu}\n`;
+  if (ligneAffectation) t += `${ligneAffectation}\n`;
+  t += `📅 ${dateMode}\n`;
+  if (separateurFinal !== false) t += `${WA_SEP}\n`;
+  return t;
+}
+
+function buildReceiptMessage(enfant, entree, postesEnfant, secteurs) {
+  const nomsSecteurs = (secteurs && secteurs.length)
+    ? secteurs
+    : (entree.sect || "").split(",").map(s => s.trim()).filter(Boolean);
+
+  const montantRecu = fmtFCFA(entree.mt);
+  const dateMode = `${formatDateFR(entree.date)} · 💳 ${entree.mode}`;
+
+  const estCantine = nomsSecteurs.some(s => s === "Cantine" || s === "Cantine crèche");
+  const estScolarite = nomsSecteurs.some(s => s === "Scolarité Maternelle" || s === "Scolarité Primaire");
+
+  let corps;
+  if (estCantine) corps = corpsRecuCantine(enfant, entree, postesEnfant, nomsSecteurs, montantRecu, dateMode);
+  else if (estScolarite) corps = corpsRecuScolarite(enfant, entree, postesEnfant, montantRecu, dateMode);
+  else corps = corpsRecuAutre(enfant, nomsSecteurs, montantRecu, dateMode);
+
+  return `${corps}${WA_SEP}\n${piedRecuWA(enfant)}`;
+}
+// ---------- REÇU CANTINE : reste du mois + échéance du mois suivant ----------
+// La cantine étant facultative et facturée mois par mois, ce reçu ne parle
+// QUE du mois payé et de l'échéance du mois suivant — jamais d'un solde global
+// qui engloberait la scolarité.
+function corpsRecuCantine(enfant, entree, postesEnfant, secteurs, montantRecu, dateMode) {
+  const cat = secteurs.includes("Cantine crèche") ? "Cantine crèche" : "Cantine";
+  const mois = entree.mois || moisScolaireCourant();
+
+  let t = enteteRecu("CANTINE", enfant, montantRecu, dateMode);
+
+  const postesDuMois = postesEnfant.filter(p => p.cat === cat && p.mois === mois && !p.is_remise);
+  const resteMois = postesDuMois.reduce((s, p) => s + Math.max((p.du || 0) - (p.paye || 0), 0), 0);
+  t += `🍽️ Reste pour ${MOIS_LONG_RECUE[mois] || mois.toLowerCase()} : ${montantCourt(resteMois)}${resteMois <= 0 ? " ✅" : ""}\n`;
+
+  const idx = MOIS_ORDRE_RECUE.indexOf(mois);
+  const moisSuivant = idx >= 0 ? MOIS_ORDRE_RECUE[idx + 1] : null;
+  if (moisSuivant) {
+    const postesSuivant = postesEnfant.filter(p => p.cat === cat && p.mois === moisSuivant && !p.is_remise);
+    const duSuivant = postesSuivant.reduce((s, p) => s + (p.du || 0), 0);
+    if (duSuivant > 0) {
+      const dl = postesSuivant.map(p => p.dl).find(Boolean);
+      t += `🔔 ${capitaleFR(MOIS_LONG_RECUE[moisSuivant] || moisSuivant)} : ${montantCourt(duSuivant)}, à payer avant le ${echeanceCantine(moisSuivant, dl)}\n`;
+    }
+  }
+  return t;
+}
+
+// ---------- REÇU SCOLARITÉ : détail par poste + échéances + total restant ----------
+// C'est le SEUL reçu qui donne un « point global », et il porte exclusivement
+// sur la scolarité (inscription, frais généraux, tranches) avec les dates
+// d'échéance — la cantine n'y entre jamais.
+function corpsRecuScolarite(enfant, entree, postesEnfant, montantRecu, dateMode) {
+  const tranche = entree.mois && TRANCHE_LABELS_RECUE[entree.mois];
+  const affectation = tranche ? `📌 Affecté à : Scolarité, ${tranche}` : "📌 Affecté à : Scolarité";
+
+  let t = enteteRecu("SCOLARITÉ", enfant, montantRecu, dateMode, affectation);
+  t += `📋 Détail par poste\n`;
+
+  const retenus = postesEnfant.filter(p =>
+    !p.is_var && !p.is_remise && p.key !== "avance" &&
+    ["Scolarité", "Fêtes scolaires", "Activités parascolaires", "Assurance", "APE"].includes(p.cat));
+
+  const lignes = [];
+  const ajouterLigne = (libelle, postes) => {
+    if (!postes.length) return;
+    const du = postes.reduce((s, p) => s + (p.du || 0), 0);
+    const paye = postes.reduce((s, p) => s + (p.paye || 0), 0);
+    const reste = Math.max(du - paye, 0);
+    lignes.push(reste <= 0
+      ? `✅ ${libelle} : ${montantCourt(paye)} soldé`
+      : `⏳ ${libelle} : ${montantCourt(paye)} payé / reste ${montantCourt(reste)}`);
+  };
+
+  ajouterLigne("Inscription", retenus.filter(p => p.key === "inscr"));
+  retenus.filter(p => p.key !== "inscr" && !["t1","t2","t3"].includes(p.key))
+    .forEach(p => ajouterLigne(p.cat, [p]));
+  ajouterLigne("Scolarité", retenus.filter(p => ["t1","t2","t3"].includes(p.key)));
+  lignes.forEach(l => { t += `${l}\n`; });
+  t += `${WA_SEP}\n`;
+
+  t += `🗓️ Échéances de la scolarité\n`;
+  ["t1","t2","t3"].forEach(key => {
+    const poste = postesEnfant.find(p => p.key === key && p.cat === "Scolarité");
+    if (!poste) return;
+    const paye = poste.paye || 0;
+    const reste = Math.max((poste.du || 0) - paye, 0);
+    const montant = reste <= 0 ? "soldé ✅" : (paye > 0 ? `reste ${montantCourt(reste)}` : montantCourt(reste));
+    t += `▫️ ${TRANCHE_LABELS_RECUE[key]} · ${echeanceAvecAnnee(poste.dl)} → ${montant}\n`;
+  });
+  t += `${WA_SEP}\n`;
+
+  const postesScolarite = postesEnfant.filter(p => p.cat === "Scolarité" && !p.is_var && !p.is_remise && p.key !== "avance");
+  const totalReste = postesScolarite.reduce((s, p) => s + Math.max((p.du || 0) - (p.paye || 0), 0), 0);
+  t += totalReste > 0
+    ? `⏳ Total restant à payer : ${montantCourt(totalReste)}\n`
+    : `✅ Scolarité intégralement soldée\n`;
+
+  return t;
+}
+
+// ---------- REÇU AUTRE : simple accusé de réception ----------
+// Uniformes, fournitures, garderie, activités, fêtes, APE, inscription… : le
+// parent reçoit la confirmation de son versement, sans point de situation.
+function corpsRecuAutre(enfant, secteurs, montantRecu, dateMode) {
+  const libelle = secteurs[0] || "Paiement";
+  return enteteRecu(WA_TITRE_SECTEUR[libelle] || libelle.toUpperCase(), enfant, montantRecu, dateMode, null, false);
+}
 // ============================================================
 // MESSAGE — BILAN COMPLET (envoyé manuellement depuis un dossier)
 // ============================================================
@@ -69,8 +233,12 @@ function buildReceiptMessage(enfant, entree, postesEnfant, secteurs) {
 // modèle validé (Cantine crèche puis Crèche pour la crèche ; Scolarité en
 // tête pour Maternelle/Primaire). Uniformes et Fournitures (montant libre)
 // n'y figurent jamais — ce ne sont pas des échéances à régulariser.
+// « Inscription » y figure pour les enfants de crèche, dont le poste
+// d'inscription porte cette catégorie-là (chez les Maternelle/Primaire il est
+// déjà regroupé dans « Scolarité ») : sans elle, la ligne disparaissait
+// complètement du bilan des dossiers de crèche.
 var ORDRE_CATEGORIES_BILAN = [
-  "Cantine crèche", "Crèche", "Scolarité", "Activités parascolaires",
+  "Cantine crèche", "Crèche", "Inscription", "Scolarité", "Activités parascolaires",
   "Fêtes scolaires", "Assurance", "APE", "Cantine", "Goûter", "Garderie"
 ];
 
@@ -86,6 +254,7 @@ var CLES_FRAIS_GENERAUX = ["inscr", "act", "fetes", "assur", "ape"];
 // il doit rester chaleureux plutôt que comptable.
 var CAT_EMOJI_BILAN = {
   "Cantine crèche": "🍼", "Crèche": "👶", "Scolarité": "🎒",
+  "Inscription": "📄",
   "Activités parascolaires": "🎨", "Fêtes scolaires": "🎉",
   "Assurance": "🛡️", "APE": "🤝", "Cantine": "🍽️",
   "Goûter": "🍪", "Garderie": "🕒"
@@ -141,8 +310,15 @@ function construireSectionFinanciere(enfant, postesEnfant) {
       } else if (retard) {
         totalRetard += du;
         blocs.push(`⚠️ ${escapeHtml(p.label)} : ${fmtFCFA(du)} en retard de paiement`);
+      } else if (CLES_FRAIS_GENERAUX.includes(p.key)) {
+        // Frais généraux non encore échus : on les affiche quand même, sinon le
+        // parent ne voit dans le détail QUE les rubriques déjà soldées ou en
+        // retard — ce qui contredit le rappel « Frais généraux » du bas du
+        // message et masque l'Assurance, les Activités, les Fêtes, l'APE…
+        blocs.push(`⏳ ${escapeHtml(p.label)} : ${fmtFCFA(0)} payé / reste ${fmtFCFA(du)}`);
       }
-      // Sinon : échéance pas encore due — on n'en parle pas au parent.
+      // Sinon : mensualité ou tranche pas encore échue — on n'en parle pas au
+      // parent pour ne pas afficher une dette qui n'existe pas encore.
     });
 
     if (blocs.length === 0) return;
@@ -207,9 +383,11 @@ function buildBilanMessage(enfant, postesEnfant, suiviEnfant) {
   msg += `💛🌸 Adorables parents, vous êtes nos meilleurs partenaires !\n`;
   msg += `Nous vous remercions pour votre confiance et votre engagement.\n`;
   msg += `Ensemble construisons l avenir de nos enfants avec amour et discipline. 💛\n\n`;
-  msg += `Les Bulles de Joie - Parakou\n`;
-  msg += `Tel : 01 97 91 94 52\n`;
-  msg += `Amour · Travail · Discipline · Creativite`;
+  msg += `💛 Les Bulles de Joie 🫧🌸\n`;
+  msg += `📍 Zongo 2, Parakou\n`;
+  msg += `🌐 ${WA_SITE}\n`;
+  msg += `📱 Secrétariat : ${WA_TEL}\n`;
+  msg += `${WA_SIGNATURE}`;
 
   return msg;
 }
@@ -234,8 +412,8 @@ function buildAnniversaireMessage(enfant) {
   msg += `\n\nNous te souhaitons une année remplie de joie, de rires et de découvertes 🌸\n\n`;
   msg += `Avec toute notre affection,\n`;
   msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n`;
-  msg += `📍 Zongo 2, Parakou · 📱 01 97 91 94 52\n`;
-  msg += `_Amour · Travail · Discipline · Créativité_`;
+  msg += `📍 Zongo 2, Parakou\n🌐 ${WA_SITE}\n📱 Secrétariat : ${WA_TEL}\n`;
+  msg += `_${WA_SIGNATURE}_`;
   return msg;
 }
 
@@ -254,8 +432,8 @@ function buildMessageRenouvellementCreche(enfant, dateRenouvellement) {
   msg += `Nous vous invitons à procéder au renouvellement avant cette date afin que ${prenom} continue de bénéficier de nos services sans interruption.\n\n`;
   msg += `N'hésitez pas à nous contacter pour toute question.\n\n`;
   msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n`;
-  msg += `📍 Zongo 2, Parakou · 📱 01 97 91 94 52\n`;
-  msg += `_Amour · Travail · Discipline · Créativité_`;
+  msg += `📍 Zongo 2, Parakou\n🌐 ${WA_SITE}\n📱 Secrétariat : ${WA_TEL}\n`;
+  msg += `_${WA_SIGNATURE}_`;
   return msg;
 }
 

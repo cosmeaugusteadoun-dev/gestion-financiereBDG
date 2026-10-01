@@ -73,6 +73,19 @@ function handleNomInput() {
 // a été coché à l'inscription).
 var SECTEURS_TOUJOURS_CLIQUABLES_MAT_PRIM = ["Uniformes", "Garderie"];
 
+// Secteurs à montant libre, ouverts à TOUTES les sections, crèche comprise :
+// le poste est créé au moment du paiement (voir imputerPaiementMultiSecteur).
+// Sans cela, aucun de ces secteurs n'était proposé pour un enfant de crèche
+// (qui n'a ni poste « Uniformes » ni « Fournitures » à la création du dossier)
+// alors que la famille achète pourtant uniforme et fournitures.
+var SECTEURS_MONTANT_LIBRE_TOUJOURS_CLIQUABLES = ["Uniformes", "Fournitures"];
+
+// Catégories dont le montant dépend d'un achat réel, sans "dû" fixe : le
+// poste peut être créé à la volée au moment du paiement (voir
+// imputerPaiementMultiSecteur) au lieu de laisser le versement partir en
+// « Avance / Trop-perçu ».
+var CATEGORIES_MONTANT_LIBRE = ["Uniformes", "Fournitures", "Halte-Garderie"];
+
 function filtrerSecteursSelonEnfant(enfant) {
   const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
   const catsDisponibles = new Set(postesEnfant.map(p => p.cat));
@@ -83,7 +96,8 @@ function filtrerSecteursSelonEnfant(enfant) {
     const input = item.querySelector("input");
     const label = input.value;
     let ok;
-    if (estMatOuPrim && SECTEURS_TOUJOURS_CLIQUABLES_MAT_PRIM.includes(label)) ok = true;
+    if (SECTEURS_MONTANT_LIBRE_TOUJOURS_CLIQUABLES.includes(label)) ok = true;
+    else if (estMatOuPrim && SECTEURS_TOUJOURS_CLIQUABLES_MAT_PRIM.includes(label)) ok = true;
     else if (SECT_TO_KEY[label]) ok = keysDisponibles.has(SECT_TO_KEY[label]);
     else if (SECT_TO_CAT[label]) ok = SECT_TO_CAT[label].some(cat => catsDisponibles.has(cat));
     else ok = true;
@@ -185,7 +199,17 @@ function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart)
         // crèche...) : pas de "dû" fixe à solder, le versement crédite
         // directement le poste au lieu de passer par la règle du mois
         // consécutif (qui ne s'applique qu'aux postes à montant fixe).
-        const posteVar = postes.find(p => p.cat === cat && p.is_var);
+        //
+        // Si l'enfant n'a pas encore ce poste — uniforme ou fournitures
+        // achetés en cours d'année, halte-garderie souscrite après coup — on le
+        // crée à la volée. Sans cela, le versement finissait dans un « Avance /
+        // Trop-perçu » : le dossier affichait un trop-perçu alors que c'est un
+        // achat réel, et le secteur concerné restait à 0 F au bilan.
+        let posteVar = postes.find(p => p.cat === cat && p.is_var);
+        if (!posteVar && CATEGORIES_MONTANT_LIBRE.includes(cat)) {
+          posteVar = { key: `var_${cat.toLowerCase().replace(/[^a-z]/g, "")}`, cat, label: cat, du: 0, paye: 0, is_var: true };
+          postes.push(posteVar);
+        }
         if (posteVar) {
           posteVar.paye = (posteVar.paye || 0) + reste;
           allocations.push({ poste: posteVar, montant: reste });

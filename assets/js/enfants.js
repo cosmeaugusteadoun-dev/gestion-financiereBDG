@@ -832,22 +832,32 @@ function exportEnfantsCsv() {
     sortiesParSecteur[sect] = (sortiesParSecteur[sect] || 0) + (Number(s.mt) || 0);
   });
 
+  // Même source de vérité que l'onglet « Bilans secteurs » : postes crédités
+  // + avances, puis au minimum le total réellement reçu d'après les entrées.
+  const encaisseParEntree = calculerEncaisseParSecteurDepuisEntrees();
+
   BILAN_CATEGORIES_FIXES.forEach(catEntry => {
-    let du = 0, paye = 0;
+    let du = 0, payePostes = 0, avance = 0;
     STATE.postes.forEach(p => {
-      if (p.is_remise || p.key === "avance") return;
+      if (p.is_remise) return;
       if (catEntry.match(p, enfantParId[p.enfant_id])) {
-        du += p.du || 0;
-        paye += p.paye || 0;
+        if (p.key === "avance") avance += p.paye || 0;
+        else {
+          du += p.du || 0;
+          payePostes += p.paye || 0;
+        }
       }
     });
+    const paye = payePostes + avance;
+    const encaisse = Math.max(paye, encaisseParEntree[catEntry.label] || 0);
+
     const sorties = sortiesParSecteur[catEntry.label] || 0;
-    const soldeNet = paye - sorties;
+    const soldeNet = encaisse - sorties;
     const auChoix = BILAN_SECTEURS_AU_CHOIX.includes(catEntry.label);
-    const reste = auChoix ? "—" : Math.max(du - paye, 0);
+    const reste = auChoix ? "—" : Math.max(du - payePostes, 0);
     const duTxt = auChoix ? "—" : du;
 
-    lignes.push([catEntry.label, paye, sorties, soldeNet, duTxt, reste]);
+    lignes.push([catEntry.label, encaisse, sorties, soldeNet, duTxt, reste]);
   });
 
   const autresSorties = sortiesParSecteur["Administratif / Divers"] || 0;

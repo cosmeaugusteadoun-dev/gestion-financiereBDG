@@ -72,11 +72,14 @@ var BILAN_CATEGORIES_FIXES = [
 // bandeau "Solde net" (encaissé − sorties) coloré pour repérer la carte
 // d'un coup d'œil dans la liste. Les secteurs "au choix" (voir
 // BILAN_SECTEURS_AU_CHOIX) omettent les lignes basées sur le "dû".
-function renderBilanSecteurCard(label, du, paye, sortiesImputees, couleur) {
+// `paye` = somme des postes réellement crédités (sert au dû/reste/taux),
+// `encaisse` = argent réellement reçu pour ce secteur (peut être supérieur si
+// une partie est en avance) — c'est ce montant qui doit apparaître à l'écran.
+function renderBilanSecteurCard(label, du, paye, encaisse, sortiesImputees, couleur) {
   const auChoix = BILAN_SECTEURS_AU_CHOIX.includes(label);
   const reste = Math.max(du - paye, 0);
   const taux = du > 0 ? Math.round((paye / du) * 100) : 0;
-  const soldeNet = paye - sortiesImputees;
+  const soldeNet = encaisse - sortiesImputees;
 
   const lignesAttendu = auChoix ? "" : `
       <div class="poste-row"><div class="poste-label">Total attendu (familles)</div><div class="poste-amounts text-pink">${fmtFCFA(du)}</div></div>
@@ -88,9 +91,9 @@ function renderBilanSecteurCard(label, du, paye, sortiesImputees, couleur) {
     <div class="card secteur-card">
       <div class="secteur-card-header">
         <span class="secteur-card-titre">${escapeHtml(label)}</span>
-        <span class="secteur-card-total text-${couleur}">${fmtFCFA(paye)}</span>
+        <span class="secteur-card-total text-${couleur}">${fmtFCFA(encaisse)}</span>
       </div>
-      <div class="poste-row"><div class="poste-label">Encaissé</div><div class="poste-amounts text-green">${fmtFCFA(paye)}</div></div>${lignesAttendu}
+      <div class="poste-row"><div class="poste-label">Encaissé</div><div class="poste-amounts text-green">${fmtFCFA(encaisse)}</div></div>${lignesAttendu}
       <div class="poste-row"><div class="poste-label">Sorties imputées</div><div class="poste-amounts">− ${fmtFCFA(sortiesImputees)}</div></div>${ligneTaux}
       <div class="secteur-card-solde secteur-solde-${couleur}">
         <span>Solde net</span>
@@ -112,38 +115,133 @@ function renderBilans() {
     sortiesParSecteur[sect] = (sortiesParSecteur[sect] || 0) + (Number(s.mt) || 0);
   });
 
+  const encaisseParEntree = calculerEncaisseParSecteurDepuisEntrees();
+
   root.innerHTML = BILAN_CATEGORIES_FIXES.map((entry, idx) => {
-    let du = 0, paye = 0;
+    let du = 0, payePostes = 0, avance = 0;
     STATE.postes.forEach(p => {
-      if (p.is_remise || p.key === "avance") return;
-      if (entry.match(p, enfantParId[p.enfant_id])) {
+      if (p.is_remise) return;
+      if (!entry.match(p, enfantParId[p.enfant_id])) return;
+      // Le poste « Avance / Trop-perçu » ne porte aucun dû, mais l'argent est
+      // bien reçu : il compte dans l'encaissé du secteur.
+      if (p.key === "avance") avance += p.paye || 0;
+      else {
         du += p.du || 0;
-        paye += p.paye || 0;
+        payePostes += p.paye || 0;
       }
     });
+
+    // Ce que les familles ont réellement versé pour ce secteur : les postes
+    // crédités + les avances, et au minimum ce que disent les entrées
+    // enregistrées (montant supérieur au dû, service souscrit après coup, ou
+    // entrée saisie avant l'imputation automatique — autant de cas où l'argent
+    // encaissé ne remontait sur aucune carte).
+    const paye = payePostes + avance;
+    const encaisse = Math.max(paye, encaisseParEntree[entry.label] || 0);
+
     const sortiesImputees = sortiesParSecteur[entry.label] || 0;
     const couleur = BILAN_SECTEUR_COULEURS[idx % BILAN_SECTEUR_COULEURS.length];
-    return renderBilanSecteurCard(entry.label, du, paye, sortiesImputees, couleur);
+    return renderBilanSecteurCard(entry.label, du, paye, encaisse, sortiesImputees, couleur);
   }).join("");
+}
+// ============================================================
+// ENCAISSEMENTS PAR SECTEUR — source : les entrées réellement reçues
+// ============================================================
+// Une entrée peut viser un secteur sans poste correspondant (service souscrit
+// après la création du dossier, montant supérieur au dû, ou entrée saisie avant
+// l'imputation automatique) : l'argent est bien encaissé mais il n'apparaît
+// sur AUCUNE carte du bilan. On reconstitue donc le total encaissé par secteur
+// directement à partir des paiements reçus :
+//   1) via les allocations — chaque versement est rangé dans la carte du poste
+//      qu'il a réellement crédité (source la plus fidèle) ;
+//   2) à défaut (entrée ancienne sans allocations), via les secteurs cochés à la
+//      saisie, répartis à parts égales lorsqu'il y en a plusieurs.
+// L'inscription n'a pas de carte dédiée : elle rejoint la carte de scolarité de
+// la section de l'enfant, comme dans son dossier.
+var SECTEUR_ENTREE_VERS_CARTE = {
+  "Scolarité Maternelle": "Maternelle",
+  "Scolarité Primaire": "Primaire",
+  "Crèche": "Crèche",
+  "Cantine": "Cantine",
+  "Cantine crèche": "Cantine crèche",
+  "Goûter": "Goûter",
+  "Garderie": "Garderie",
+  "Halte-Garderie": "Halte-Garderie",
+  "Uniformes": "Uniformes",
+  "Fournitures": "Fournitures",
+  "Activités parascolaires": "Activités parascolaires",
+  "Fêtes scolaires": "Fêtes scolaires",
+  "Assurance": "Assurance",
+  "APE": "APE"
+};
+
+// Carte du bilan à laquelle rattacher un poste (l'inscription suit la scolarité)
+function carteBilanPourPoste(p, enfant) {
+  if (p.cat === "Inscription") {
+    if (enfant && MAT_SECTS.includes(enfant.sect)) return "Maternelle";
+    if (enfant && PRIM_SECTS.includes(enfant.sect)) return "Primaire";
+    return "Crèche";
+  }
+  const entry = BILAN_CATEGORIES_FIXES.find(e => e.match(p, enfant));
+  return entry ? entry.label : null;
+}
+
+// Total réellement encaissé par carte de secteur, d'après les entrées
+function calculerEncaisseParSecteurDepuisEntrees() {
+  const enfantParId = {};
+  STATE.enfants.forEach(e => { enfantParId[e.id] = e; });
+
+  const total = {};
+  STATE.entrees.forEach(en => {
+    const montant = Number(en.mt) || 0;
+    if (montant <= 0) return;
+    const enfant = en.enfant_id ? enfantParId[en.enfant_id] : null;
+
+    let impute = false;
+    if (Array.isArray(en.allocations) && en.allocations.length > 0) {
+      en.allocations.forEach(a => {
+        const poste = STATE.postes.find(p => p.id === a.poste_id);
+        if (!poste) return;
+        const carte = carteBilanPourPoste(poste, enfantParId[poste.enfant_id] || enfant);
+        if (!carte) return;
+        total[carte] = (total[carte] || 0) + (Number(a.montant) || 0);
+        impute = true;
+      });
+    }
+    if (impute) return;
+
+    const secteurs = (en.sect || "").split(",").map(s => s.trim()).filter(Boolean);
+    if (secteurs.length === 0) return;
+    const part = montant / secteurs.length;
+    secteurs.forEach(s => {
+      const carte = SECTEUR_ENTREE_VERS_CARTE[s];
+      if (!carte) return;
+      total[carte] = (total[carte] || 0) + part;
+    });
+  });
+
+  return total;
 }
 
 // Encaissé par secteur — exactement le même calcul que les cartes du
-// "Bilan par secteur" (somme des postes.paye par catégorie, via
-// BILAN_CATEGORIES_FIXES), pour que le Tableau de bord affiche des
-// montants cohérents avec cet onglet plutôt que de recompter à partir des
-// libellés de secteur saisis sur chaque entrée (taxonomie différente).
+// "Bilan par secteur" (postes crédités + avances, puis au minimum le total
+// réellement reçu d'après les entrées), pour que le Tableau de bord affiche
+// des montants parfaitement cohérents avec cet onglet.
 function calculerEncaisseParSecteurBilan() {
   const enfantParId = {};
   STATE.enfants.forEach(e => { enfantParId[e.id] = e; });
+
+  const encaisseParEntree = calculerEncaisseParSecteurDepuisEntrees();
 
   const encaisseParSecteur = {};
   BILAN_CATEGORIES_FIXES.forEach(entry => {
     let paye = 0;
     STATE.postes.forEach(p => {
-      if (p.is_remise || p.key === "avance") return;
+      if (p.is_remise) return;
       if (entry.match(p, enfantParId[p.enfant_id])) paye += p.paye || 0;
     });
-    if (paye > 0) encaisseParSecteur[entry.label] = paye;
+    const encaisse = Math.max(paye, encaisseParEntree[entry.label] || 0);
+    if (encaisse > 0) encaisseParSecteur[entry.label] = encaisse;
   });
   return encaisseParSecteur;
 }

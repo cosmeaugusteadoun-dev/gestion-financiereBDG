@@ -504,7 +504,7 @@ function buildMessageSuiviClasse(sect, trim, observation) {
   let msg = `Bonjour 👋,\n\n`;
   msg += `📋 *Information de la classe — ${section} · ${trim}*\n\n`;
   msg += `${observation}\n\n`;
-  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou · 📱 01 97 91 94 52\n_Amour · Travail · Discipline · Créativité_`;
+  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou\n🌐 ${WA_SITE}\n📱 Secrétariat : ${WA_TEL}\n_${WA_SIGNATURE}_`;
   return msg;
 }
 
@@ -625,9 +625,11 @@ function buildMessageBulletin(enfant, suivi, postesEnfant) {
   msg += `💛🌸 Adorables parents, vous êtes nos meilleurs partenaires !\n`;
   msg += `Nous vous remercions pour votre confiance et votre engagement.\n`;
   msg += `Ensemble construisons l avenir de nos enfants avec amour et discipline. 💛\n\n`;
-  msg += `Les Bulles de Joie - Parakou\n`;
-  msg += `Tel : 01 97 91 94 52\n`;
-  msg += `Amour · Travail · Discipline · Creativite`;
+  msg += `💛 Les Bulles de Joie 🫧🌸\n`;
+  msg += `📍 Zongo 2, Parakou\n`;
+  msg += `🌐 ${WA_SITE}\n`;
+  msg += `📱 Secrétariat : ${WA_TEL}\n`;
+  msg += `${WA_SIGNATURE}`;
 
   return msg;
 }
@@ -666,7 +668,7 @@ function buildMessageBulletinAnnuel(enfant, suivis) {
   }
 
   msg += `Merci pour votre confiance tout au long de cette année scolaire.\n\n`;
-  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou · 📱 01 97 91 94 52\n_Amour · Travail · Discipline · Créativité_`;
+  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou\n🌐 ${WA_SITE}\n📱 Secrétariat : ${WA_TEL}\n_${WA_SIGNATURE}_`;
   return msg;
 }
 
@@ -678,7 +680,7 @@ function buildMessageAlerteDifficulte(enfant, suivi) {
   let msg = `Bonjour ${civiliteTxt} ${enfant.parent || ""} 👋,\n\n`.replace(/ {2,}/g, " ");
   msg += `Nous souhaitons attirer votre attention sur les résultats de ${prenom} ce trimestre (*${resultat}*), en difficulté selon notre grille d'évaluation. Un accompagnement rapproché à la maison, et un échange avec l'équipe pédagogique, pourraient beaucoup l'aider.\n\n`;
   msg += `N'hésitez pas à nous contacter pour en discuter ensemble.\n\n`;
-  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou · 📱 01 97 91 94 52`;
+  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou\n🌐 ${WA_SITE}\n📱 Secrétariat : ${WA_TEL}`;
   return msg;
 }
 
@@ -688,7 +690,7 @@ function buildMessageAlerteAbsRet(enfant, suivi) {
 
   let msg = `Bonjour ${civiliteTxt} ${enfant.parent || ""} 👋,\n\n`.replace(/ {2,}/g, " ");
   msg += `⚠️ Nous constatons *${suivi.absences || 0} absence(s) non justifiée(s)* et *${suivi.retards || 0} retard(s) répétitif(s)* pour ${prenom} ce trimestre. La régularité est essentielle pour sa réussite — merci de veiller à sa ponctualité et de nous justifier ses absences.\n\n`;
-  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou · 📱 01 97 91 94 52`;
+  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou\n🌐 ${WA_SITE}\n📱 Secrétariat : ${WA_TEL}`;
   return msg;
 }
 
@@ -698,7 +700,7 @@ function buildMessageAlerteComportement(enfant, suivi) {
 
   let msg = `Bonjour ${civiliteTxt} ${enfant.parent || ""} 👋,\n\n`.replace(/ {2,}/g, " ");
   msg += `Nous aimerions échanger avec vous au sujet du comportement de ${prenom} ce trimestre, jugé *préoccupant* par l'équipe. Votre implication nous serait précieuse pour l'accompagner au mieux.\n\n`;
-  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou · 📱 01 97 91 94 52`;
+  msg += `💛 *L'équipe des Bulles de Joie* 🫧🌸\n📍 Zongo 2, Parakou\n🌐 ${WA_SITE}\n📱 Secrétariat : ${WA_TEL}`;
   return msg;
 }
 
