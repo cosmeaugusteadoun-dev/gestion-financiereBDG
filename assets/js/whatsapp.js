@@ -128,7 +128,9 @@ function buildReceiptMessage(enfant, entree, postesEnfant, secteurs) {
   const montantRecu = fmtFCFA(entree.mt);
   const dateMode = `${formatDateFR(entree.date)} · 💳 ${entree.mode}`;
 
-  const estCantine = nomsSecteurs.some(s => s === "Cantine" || s === "Cantine crèche");
+  // Le Petit-déjeuner et le Déjeuner sont saisis séparément mais relèvent
+  // du même reçu « Cantine » (mois en cours + échéance du mois suivant).
+  const estCantine = nomsSecteurs.some(s => s === "Cantine" || s === "Cantine crèche" || s === "Petit-déjeuner" || s === "Déjeuner");
   const estScolarite = nomsSecteurs.some(s => s === "Scolarité Maternelle" || s === "Scolarité Primaire");
 
   let corps;
@@ -449,6 +451,8 @@ function renderWhatsAppTab() {
     .filter(e => !recherche || e.nom.toLowerCase().includes(recherche))
     .sort((a, b) => a.nom.localeCompare(b.nom));
 
+  majCompteurListe(root, liste.length);
+
   if (liste.length === 0) {
     root.innerHTML = `<div class="empty-state"><div class="icon"><i class="bi bi-whatsapp"></i></div>Aucun enfant trouvé.</div>`;
     return;
@@ -542,6 +546,7 @@ function renderMessagerieTab() {
   if (!root) return;
 
   const liste = enfantsFiltresMessagerie();
+  majCompteurListe(root, liste.length);
 
   if (liste.length === 0) {
     root.innerHTML = `<div class="empty-state"><div class="icon"><i class="bi bi-megaphone"></i></div>Aucun parent trouvé.</div>`;

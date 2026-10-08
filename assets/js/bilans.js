@@ -8,9 +8,10 @@ var CHART_COLORS = {
   rose:     "#E5007D", // identité de l'école — Filles / tranches d'âge
   bleu:     "#2a78d6", // Garçons
   or:       "#D4AF37", // Non renseigné
-  bon:      "#0ca30c", // Soldé
-  alerte:   "#fab219", // Partiel
-  critique: "#d03b3b"  // Impayé
+  bon:      "#0ca30c", // À jour / Soldé
+  orange:   "#e8710a", // Retard de crèche
+  alerte:   "#fab219", // Retard de cantine
+  critique: "#d03b3b"  // Retard de scolarité
 };
 
 var TRANCHES_AGE = [
@@ -27,8 +28,12 @@ var TRANCHES_AGE = [
 
 // Couleur décorative attribuée à chaque carte secteur, dans l'ordre —
 // purement visuelle (distinguer les cartes d'un coup d'œil dans la liste),
-// sans rapport avec les couleurs de statut (soldé/partiel/impayé).
+// sans rapport avec les couleurs de statut (à jour / retards).
 var BILAN_SECTEUR_COULEURS = ["pink", "navy", "green", "gold", "blue", "orange", "red"];
+
+// Filtre par statut du Tableau de bord (liste « Alertes de retard » et
+// « Parents à relancer ») — conservé entre les rendus, voir renderChartsBloc.
+var filtreStatutDashActif = "";
 
 // Liste fixe et complète des secteurs — toujours affichés, même à 0 F,
 // pour un bilan lisible d'un coup d'œil. Maternelle et Primaire partagent
@@ -51,9 +56,9 @@ var BILAN_SECTEURS_AU_CHOIX = [
 // le dossier de l'enfant (voir enfants.js, catAffichage) — deux vues
 // différentes, deux granularités différentes, par choix explicite.
 var BILAN_CATEGORIES_FIXES = [
-  { label: "Crèche",                    match: (p, ef) => p.cat === "Crèche" },
-  { label: "Maternelle",                match: (p, ef) => p.cat === "Scolarité" && ef && MAT_SECTS.includes(ef.sect) },
-  { label: "Primaire",                  match: (p, ef) => p.cat === "Scolarité" && ef && PRIM_SECTS.includes(ef.sect) },
+  { label: "Crèche",                    match: (p, ef) => p.cat === "Crèche" || ((p.key === "inscr" || p.cat === "Inscription") && ef && ef.sect === "creche") },
+  { label: "Maternelle",                match: (p, ef) => (p.cat === "Scolarité" || p.cat === "Inscription") && ef && MAT_SECTS.includes(ef.sect) },
+  { label: "Primaire",                  match: (p, ef) => (p.cat === "Scolarité" || p.cat === "Inscription") && ef && PRIM_SECTS.includes(ef.sect) },
   { label: "Activités parascolaires",   match: (p) => p.cat === "Activités parascolaires" },
   { label: "Fêtes scolaires",           match: (p) => p.cat === "Fêtes scolaires" },
   { label: "Assurance",                 match: (p) => p.cat === "Assurance" },
@@ -61,7 +66,7 @@ var BILAN_CATEGORIES_FIXES = [
   { label: "Cantine",                   match: (p) => p.cat === "Cantine" },
   { label: "Cantine crèche",            match: (p) => p.cat === "Cantine crèche" },
   { label: "Goûter",                    match: (p) => p.cat === "Goûter" },
-  { label: "Garderie",                  match: (p) => p.cat === "Garderie" },
+  { label: "Garderie",                  match: (p, ef) => p.cat === "Garderie" || ((p.key === "inscr" || p.cat === "Inscription") && ef && ef.sect === "garderie") },
   { label: "Uniformes",                 match: (p) => p.cat === "Uniformes" },
   { label: "Fournitures",               match: (p) => p.cat === "Fournitures" },
   { label: "Halte-Garderie",            match: (p) => PONCTUEL_CRECHE_CATS.includes(p.cat) }
@@ -75,6 +80,10 @@ var BILAN_CATEGORIES_FIXES = [
 // `paye` = somme des postes réellement crédités (sert au dû/reste/taux),
 // `encaisse` = argent réellement reçu pour ce secteur (peut être supérieur si
 // une partie est en avance) — c'est ce montant qui doit apparaître à l'écran.
+function libelleSecteurFinance(label) {
+  return label === "Garderie" ? "Garderie midi" : label;
+}
+
 function renderBilanSecteurCard(label, du, paye, encaisse, sortiesImputees, couleur) {
   const auChoix = BILAN_SECTEURS_AU_CHOIX.includes(label);
   const reste = Math.max(du - paye, 0);
@@ -90,7 +99,7 @@ function renderBilanSecteurCard(label, du, paye, encaisse, sortiesImputees, coul
   return `
     <div class="card secteur-card">
       <div class="secteur-card-header">
-        <span class="secteur-card-titre">${escapeHtml(label)}</span>
+        <span class="secteur-card-titre">${escapeHtml(libelleSecteurFinance(label))}</span>
         <span class="secteur-card-total text-${couleur}">${fmtFCFA(encaisse)}</span>
       </div>
       <div class="poste-row"><div class="poste-label">Encaissé</div><div class="poste-amounts text-green">${fmtFCFA(encaisse)}</div></div>${lignesAttendu}
@@ -105,6 +114,7 @@ function renderBilanSecteurCard(label, du, paye, encaisse, sortiesImputees, coul
 function renderBilans() {
   const root = document.getElementById("bilansSecteurs");
   if (!root) return;
+  majCompteurListe(root, BILAN_CATEGORIES_FIXES.length);
 
   const enfantParId = {};
   STATE.enfants.forEach(e => { enfantParId[e.id] = e; });
@@ -163,6 +173,11 @@ var SECTEUR_ENTREE_VERS_CARTE = {
   "Scolarité Primaire": "Primaire",
   "Crèche": "Crèche",
   "Cantine": "Cantine",
+  // Le Petit-déjeuner et le Déjeuner sont saisis séparément dans le
+  // formulaire d'enregistrement mais restent regroupés sous la carte
+  // « Cantine » du bilan général (voir plus bas, calculerRecettesParSecteur).
+  "Petit-déjeuner": "Cantine",
+  "Déjeuner": "Cantine",
   "Cantine crèche": "Cantine crèche",
   "Goûter": "Goûter",
   "Garderie": "Garderie",
@@ -175,54 +190,77 @@ var SECTEUR_ENTREE_VERS_CARTE = {
   "APE": "APE"
 };
 
-// Carte du bilan à laquelle rattacher un poste (l'inscription suit la scolarité)
+// Normaliser les anciens libellés, sans confondre crèche et garderie midi.
+function normaliserSecteurBilan(secteur) {
+  return String(secteur || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function carteBilanPourSecteur(secteur, enfant) {
+  const cle = normaliserSecteurBilan(secteur);
+  if (cle === "inscription") {
+    if (!enfant) return null;
+    if (MAT_SECTS.includes(enfant.sect)) return "Maternelle";
+    if (PRIM_SECTS.includes(enfant.sect)) return "Primaire";
+    if (enfant.sect === "garderie") return "Garderie";
+    if (enfant.sect === "creche") return "Crèche";
+    return null;
+  }
+  if (["creche (garderie)", "creche / garderie"].includes(cle)) return "Crèche";
+  if (cle === "garderie midi") return "Garderie";
+  const secteurConnu = Object.keys(SECTEUR_ENTREE_VERS_CARTE)
+    .find(s => normaliserSecteurBilan(s) === cle);
+  return secteurConnu ? SECTEUR_ENTREE_VERS_CARTE[secteurConnu] : null;
+}
+
+// L'inscription suit le service auquel appartient le dossier.
 function carteBilanPourPoste(p, enfant) {
-  if (p.cat === "Inscription") {
-    if (enfant && MAT_SECTS.includes(enfant.sect)) return "Maternelle";
-    if (enfant && PRIM_SECTS.includes(enfant.sect)) return "Primaire";
-    return "Crèche";
+  if (!p) return null;
+  if (p.key === "inscr" || p.cat === "Inscription") {
+    return carteBilanPourSecteur("Inscription", enfant);
   }
   const entry = BILAN_CATEGORIES_FIXES.find(e => e.match(p, enfant));
-  return entry ? entry.label : null;
+  return entry ? entry.label : carteBilanPourSecteur(p.cat, enfant);
 }
 
-// Total réellement encaissé par carte de secteur, d'après les entrées
+// Ne compter chaque franc qu'une fois, même si une partie des postes a disparu.
 function calculerEncaisseParSecteurDepuisEntrees() {
-  const enfantParId = {};
-  STATE.enfants.forEach(e => { enfantParId[e.id] = e; });
-
+  const enfantParId = new Map(STATE.enfants.map(e => [e.id, e]));
+  const posteParId = new Map(STATE.postes.map(p => [p.id, p]));
   const total = {};
   STATE.entrees.forEach(en => {
-    const montant = Number(en.mt) || 0;
-    if (montant <= 0) return;
-    const enfant = en.enfant_id ? enfantParId[en.enfant_id] : null;
+    const montant = Number(en.mt);
+    if (!Number.isFinite(montant) || montant <= 0) return;
+    const enfant = enfantParId.get(en.enfant_id);
+    const secteurs = [...new Set(String(en.sect || "").split(",").map(s => s.trim()).filter(Boolean))];
+    const cartesDeclarees = secteurs.map(s => carteBilanPourSecteur(s, enfant)).filter(Boolean);
+    const cartesUniques = [...new Set(cartesDeclarees)];
+    let impute = 0;
 
-    let impute = false;
-    if (Array.isArray(en.allocations) && en.allocations.length > 0) {
-      en.allocations.forEach(a => {
-        const poste = STATE.postes.find(p => p.id === a.poste_id);
-        if (!poste) return;
-        const carte = carteBilanPourPoste(poste, enfantParId[poste.enfant_id] || enfant);
-        if (!carte) return;
-        total[carte] = (total[carte] || 0) + (Number(a.montant) || 0);
-        impute = true;
+    (Array.isArray(en.allocations) ? en.allocations : []).forEach(a => {
+      const versement = Math.min(Math.max(Number(a.montant) || 0, 0), montant - impute);
+      if (!Number.isFinite(versement) || versement <= 0) return;
+      const poste = posteParId.get(a.poste_id);
+      const archive = a.poste && a.poste.id === a.poste_id ? a.poste : null;
+      const carte = carteBilanPourSecteur(a.secteur, enfant)
+        || carteBilanPourPoste(poste, (poste && enfantParId.get(poste.enfant_id)) || enfant)
+        || carteBilanPourPoste(archive, (archive && enfantParId.get(archive.enfant_id)) || enfant)
+        || (cartesUniques.length === 1 ? cartesUniques[0] : null);
+      if (!carte) return;
+      total[carte] = (total[carte] || 0) + versement;
+      impute += versement;
+    });
+
+    // Une allocation retrouvée ne doit plus faire disparaître le reste de l'entrée.
+    const restant = montant - impute;
+    if (restant > 0 && cartesDeclarees.length) {
+      cartesDeclarees.forEach(carte => {
+        total[carte] = (total[carte] || 0) + restant / cartesDeclarees.length;
       });
     }
-    if (impute) return;
-
-    const secteurs = (en.sect || "").split(",").map(s => s.trim()).filter(Boolean);
-    if (secteurs.length === 0) return;
-    const part = montant / secteurs.length;
-    secteurs.forEach(s => {
-      const carte = SECTEUR_ENTREE_VERS_CARTE[s];
-      if (!carte) return;
-      total[carte] = (total[carte] || 0) + part;
-    });
   });
-
   return total;
 }
-
 // Encaissé par secteur — exactement le même calcul que les cartes du
 // "Bilan par secteur" (postes crédités + avances, puis au minimum le total
 // réellement reçu d'après les entrées), pour que le Tableau de bord affiche
@@ -246,17 +284,39 @@ function calculerEncaisseParSecteurBilan() {
   return encaisseParSecteur;
 }
 
-// Recettes déclarées par secteur (d'après le(s) secteur(s) coché(s) sur
-// chaque entrée) — un paiement multi-secteurs compte dans chacun d'eux.
-// Réutilisée par le Bilan général et le mini-bilan des Entrées.
-function calculerRecettesParSecteur() {
-  const recettesParSecteur = {};
-  STATE.entrees.forEach(e => {
-    const secteurs = (e.sect || "").split(",").map(s => s.trim()).filter(Boolean);
-    if (secteurs.length === 0) secteurs.push("Non classé");
-    secteurs.forEach(sect => { recettesParSecteur[sect] = (recettesParSecteur[sect] || 0) + (Number(e.mt) || 0); });
+// Recettes réellement ventilées, réutilisées par le Bilan général et les
+// Entrées. separerRepas garde les services de cantine distincts à la saisie.
+function secteurEnregistrementPoste(p, enfant) {
+  if (p.key === "inscr") return "Inscription";
+  if (p.key.indexOf("ptdej_") === 0) return "Petit-déjeuner";
+  if (p.key.indexOf("dej_") === 0) return "Déjeuner";
+  if (p.cat === "Scolarité") return enfant && PRIM_SECTS.includes(enfant.sect) ? "Scolarité Primaire" : "Scolarité Maternelle";
+  return p.cat;
+}
+
+function calculerRecettesParSecteur(separerRepas = false) {
+  const total = {};
+  const ajouter = (secteur, montant) => {
+    const cle = !separerRepas && ["Petit-déjeuner", "Déjeuner"].includes(secteur) ? "Cantine" : secteur;
+    total[cle] = (total[cle] || 0) + montant;
+  };
+  STATE.entrees.forEach(en => {
+    const montant = Number(en.mt) || 0;
+    let impute = 0;
+    (en.allocations || []).forEach(a => {
+      const poste = STATE.postes.find(p => p.id === a.poste_id);
+      if (!poste) return;
+      const versement = Math.min(Math.max(Number(a.montant) || 0, 0), montant - impute);
+      if (versement <= 0) return;
+      ajouter(a.secteur || secteurEnregistrementPoste(poste, STATE.enfants.find(e => e.id === poste.enfant_id)), versement);
+      impute += versement;
+    });
+    // Sans ventilation historique, répartir uniquement le montant non tracé.
+    const secteurs = [...new Set((en.sect || "").split(",").map(s => s.trim()).filter(Boolean))];
+    if (!secteurs.length) secteurs.push("Non classé");
+    if (montant > impute) secteurs.forEach(s => ajouter(s, (montant - impute) / secteurs.length));
   });
-  return recettesParSecteur;
+  return total;
 }
 
 // ============================================================
@@ -308,13 +368,13 @@ function renderBilanGeneral() {
 
     <div class="charts-grid">
       <div class="card">
-        <div class="card-title"><i class="bi bi-graph-up-arrow"></i> Recettes par secteur</div>
+        <div class="card-title"><i class="bi bi-graph-up-arrow"></i> Recettes par secteur <span class="badge badge-gray">${Object.keys(recettesParSecteur).length}</span></div>
         ${Object.keys(recettesParSecteur).length === 0 ? '<p class="text-muted">Aucune recette pour le moment.</p>' :
           Object.entries(recettesParSecteur).sort((a, b) => b[1] - a[1]).map(([sect, mt]) => `
             <div class="poste-row"><div class="poste-label">${escapeHtml(sect)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>`).join("")}
       </div>
       <div class="card">
-        <div class="card-title"><i class="bi bi-wallet2"></i> Dépenses par secteur</div>
+        <div class="card-title"><i class="bi bi-wallet2"></i> Dépenses par secteur <span class="badge badge-gray">${Object.keys(depensesParSecteur).length}</span></div>
         ${Object.keys(depensesParSecteur).length === 0 ? '<p class="text-muted">Aucune dépense enregistrée.</p>' :
           Object.entries(depensesParSecteur).sort((a, b) => b[1] - a[1]).map(([sect, mt]) => `
             <div class="poste-row"><div class="poste-label">${escapeHtml(sect)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>`).join("")}
@@ -337,21 +397,21 @@ function renderBilanGeneral() {
     </div>
 
     <div class="card">
-      <div class="card-title"><i class="bi bi-credit-card"></i> Encaissements par mode de paiement</div>
+      <div class="card-title"><i class="bi bi-credit-card"></i> Encaissements par mode de paiement <span class="badge badge-gray">${Object.keys(modeStats).length}</span></div>
       ${Object.keys(modeStats).length === 0 ? '<p class="text-muted">Aucune donnée pour le moment.</p>' :
         Object.entries(modeStats).sort((a, b) => b[1] - a[1]).map(([mode, mt]) => `
           <div class="poste-row"><div class="poste-label">${escapeHtml(mode)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>`).join("")}
     </div>
 
     <div class="card">
-      <div class="card-title"><i class="bi bi-people-fill"></i> Synthèse par enfant</div>
+      <div class="card-title"><i class="bi bi-people-fill"></i> Synthèse par enfant <span class="badge badge-gray">${syntheseEnfants.length}</span></div>
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr><th>Enfant</th><th>Section</th><th>Total dû</th><th>Payé</th><th>Reste</th><th>%</th><th>Statut</th></tr></thead>
           <tbody>
             ${syntheseEnfants.length === 0 ? '<tr><td colspan="7" class="text-center text-muted">Aucun dossier pour le moment.</td></tr>' :
               syntheseEnfants.map(x => {
-                const info = STATUT_INFO[x.statut];
+                const info = STATUT_INFO[x.statut] || STATUT_INFO.a_jour;
                 return `<tr>
                   <td>${escapeHtml(x.nom)}</td>
                   <td>${escapeHtml(x.sect)}</td>
@@ -406,16 +466,20 @@ function calculerRepartitionAges() {
   return { tranches, nonRenseigne };
 }
 
+// Répartition des dossiers par statut de paiement — les 4 statuts de suivi
+// (les dossiers « Soldé » sont comptés avec « À jour », ils n'ont aucun
+// retard non plus). Voir postes.js, statutPaiement.
 function calculerRepartitionStatuts() {
-  let solde = 0, partiel = 0, impaye = 0;
+  let aJour = 0, retardScol = 0, retardCreche = 0, retardCantine = 0;
   STATE.enfants.forEach(e => {
     const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
     const statut = statutPaiement(postesEnfant);
-    if (statut === "solde") solde++;
-    else if (statut === "partiel") partiel++;
-    else impaye++;
+    if (statut === "solde" || statut === "a_jour") aJour++;
+    else if (statut === "retard_creche") retardCreche++;
+    else if (statut === "retard_cantine") retardCantine++;
+    else retardScol++;
   });
-  return { solde, partiel, impaye };
+  return { aJour, retardScol, retardCreche, retardCantine };
 }
 
 // Diagramme circulaire (donut) en SVG pur — segments proportionnels tracés
@@ -500,12 +564,30 @@ function renderChartsBloc(containerId) {
   if (nonRenseigne > 0) categoriesAge.push({ label: "Non renseigné", value: nonRenseigne });
   const barChartAges = construireBarChart(categoriesAge, CHART_COLORS.rose);
 
-  const { solde, partiel, impaye } = calculerRepartitionStatuts();
+  const { aJour, retardScol, retardCreche, retardCantine } = calculerRepartitionStatuts();
   const donutStatuts = construireDonut([
-    { label: "Soldé",   value: solde,   color: CHART_COLORS.bon,      icon: "bi-check-circle-fill" },
-    { label: "Partiel", value: partiel, color: CHART_COLORS.alerte,   icon: "bi-exclamation-circle-fill" },
-    { label: "Impayé",  value: impaye,  color: CHART_COLORS.critique, icon: "bi-x-circle-fill" }
-  ], solde + partiel + impaye, "dossiers");
+    { label: "À jour",             value: aJour,         color: CHART_COLORS.bon,      icon: "bi-check-circle-fill" },
+    { label: "Retard de scolarité", value: retardScol,    color: CHART_COLORS.critique, icon: "bi-exclamation-triangle-fill" },
+    { label: "Retard de crèche",    value: retardCreche,  color: CHART_COLORS.orange,   icon: "bi-exclamation-circle-fill" },
+    { label: "Retard de cantine",   value: retardCantine, color: CHART_COLORS.alerte,   icon: "bi-cup-hot-fill" }
+  ], aJour + retardScol + retardCreche + retardCantine, "dossiers");
+
+  // Sur le Tableau de bord uniquement : filtre par statut appliqué aux
+  // listes « Alertes de retard » et « Parents à relancer ». La valeur est
+  // conservée entre les rendus (filtreStatutDashActif).
+  const optionStatut = (valeur, libelle) => `<option value="${valeur}"${filtreStatutDashActif === valeur ? " selected" : ""}>${libelle}</option>`;
+  const filtreStatut = containerId === "dashCharts" ? `
+    <div class="field" style="margin:10px 0 0;">
+      <label for="filtreStatutDash" style="font-size:11.5px;">Filtrer les listes par statut</label>
+      <select id="filtreStatutDash">
+        <option value=""${filtreStatutDashActif === "" ? " selected" : ""}>Tous les statuts</option>
+        ${optionStatut("a_jour", "À jour")}
+        ${optionStatut("retard_scol", "Retard de scolarité")}
+        ${optionStatut("retard_creche", "Retard de crèche")}
+        ${optionStatut("retard_cantine", "Retard de cantine")}
+        ${optionStatut("solde", "Soldé")}
+      </select>
+    </div>` : "";
 
   root.innerHTML = `
     <div class="card chart-card">
@@ -519,6 +601,27 @@ function renderChartsBloc(containerId) {
     <div class="card chart-card">
       <div class="card-title"><i class="bi bi-pie-chart-fill"></i> Statut des paiements</div>
       ${donutStatuts}
+      ${filtreStatut}
+      ${containerId === "dashCharts" ? '<div id="dashStatutListe"></div>' : ""}
     </div>
   `;
+
+  root.querySelector("#filtreStatutDash")?.addEventListener("change", (ev) => {
+    filtreStatutDashActif = ev.target.value;
+    renderAlertesRetard();
+    renderParentsARelancer();
+    renderListeStatutDashboard();
+  });
+  if (containerId === "dashCharts") renderListeStatutDashboard();
+}
+
+function renderListeStatutDashboard() {
+  const root = document.getElementById("dashStatutListe");
+  if (!root) return;
+  if (!filtreStatutDashActif) { root.innerHTML = ""; return; }
+  const liste = STATE.enfants.filter(e => correspondStatut(
+    statutPaiement(STATE.postes.filter(p => p.enfant_id === e.id)), filtreStatutDashActif));
+  root.innerHTML = `<p class="text-muted">${liste.length} dossier${liste.length > 1 ? "s" : ""}</p>` + liste.map(e =>
+    `<div class="poste-row"><span>${escapeHtml(e.nom)}</span><button type="button" class="btn btn-ghost btn-sm" data-statut-dossier="${escapeHtml(e.id)}">Dossier</button></div>`).join("");
+  root.querySelectorAll("[data-statut-dossier]").forEach(btn => btn.addEventListener("click", () => verFicheEnfant(btn.dataset.statutDossier)));
 }

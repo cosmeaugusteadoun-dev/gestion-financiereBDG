@@ -783,6 +783,7 @@ function renderNotesMetriquesEtTable() {
   }));
 
   const notesSaisies = lignes.filter(x => x.suivi).length;
+  majCompteurListe(tableRoot, lignes.length);
   const enDifficulte = lignes.filter(x => estEnDifficulte(x.suivi)).length;
   const alertesAbsRet = lignes.filter(x => aAlerteAbsRet(x.suivi)).length;
   const excellents = lignes.filter(x => estExcellent(x.suivi)).length;

@@ -63,6 +63,7 @@ var MOIS_CANTINE_REDUITS = ["Mar", "Jun", "Sep"];
 // GÉNÉRATION DES POSTES FINANCIERS
 // ============================================================
 function buildPostes(sect, stat, opt) {
+  opt = opt || {};
   const s = stat;
   const p = [];
 
@@ -82,7 +83,7 @@ function buildPostes(sect, stat, opt) {
     if (opt.cantC === "oui") {
       MOIS_CRECHE.filter(m => !MOIS_CANTINE_REDUITS.includes(m)).forEach(m => {
         p.push({ key:`cantc_${m}`, cat:"Cantine crèche", label:`Cantine crèche ${m}`,
-                 du:13000, paye:0, mois:m });
+                 du:13000, paye:0, mois:m, dl:moisDlC[m] });
       });
       MOIS_CANTINE_REDUITS.forEach(m => {
         p.push({ key:`cantc_reduit_${m}`, cat:"Cantine crèche",
@@ -132,9 +133,7 @@ function buildPostes(sect, stat, opt) {
     if (opt.ptdej === "oui" || opt.dej === "oui") {
       if (opt.ptdej === "oui") moisCantinePleins.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
       if (opt.dej   === "oui") moisCantinePleins.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
-      MOIS_CANTINE_REDUITS.forEach(m => p.push({ key:`cantine_reduit_${m}`, cat:"Cantine",
-               label:`Cantine ${m} (effectif réduit — montant à définir)`,
-               du:0, paye:0, mois:m, dl:MOIS_DL_5[m], is_reduit:true }));
+      ajouterRepasReduits(p, opt);
     }
     // Le goûter est une catégorie à part entière (bilans, Entrées, Sorties)
     // — seul le dossier de l'enfant continue de l'afficher regroupé avec
@@ -169,10 +168,13 @@ function buildPostes(sect, stat, opt) {
     if (opt.ptdej === "oui" || opt.dej === "oui") {
       if (opt.ptdej === "oui") moisCantinePleinsPrim.forEach(m => p.push({ key:`ptdej_${m}`, cat:"Cantine", label:`Petit-déjeuner ${m}`, du:5000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
       if (opt.dej   === "oui") moisCantinePleinsPrim.forEach(m => p.push({ key:`dej_${m}`,   cat:"Cantine", label:`Déjeuner ${m}`,       du:9000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
-      MOIS_CANTINE_REDUITS.forEach(m => p.push({ key:`cantine_reduit_${m}`, cat:"Cantine",
-               label:`Cantine ${m} (effectif réduit — montant à définir)`,
-               du:0, paye:0, mois:m, dl:MOIS_DL_5[m], is_reduit:true }));
+      ajouterRepasReduits(p, opt);
     }
+    if (opt.gout === "oui") MOIS.forEach(m => p.push({
+      key: MOIS_CANTINE_REDUITS.includes(m) ? `gout_reduit_${m}` : `gout_${m}`,
+      cat:"Goûter", label:`Goûter ${m}`, du:MOIS_CANTINE_REDUITS.includes(m) ? 0 : 3000,
+      paye:0, mois:m, dl:MOIS_DL_5[m], is_reduit:MOIS_CANTINE_REDUITS.includes(m)
+    }));
     // Garderie de midi : automatiquement incluse dès que le Déjeuner est
     // souscrit (l'enfant reste forcément sur place à midi), et disponible
     // seule pour les enfants qui apportent leur repas mais restent le midi.
@@ -217,6 +219,22 @@ function buildPostes(sect, stat, opt) {
   return p;
 }
 
+function ajouterRepasReduits(postes, opt) {
+  MOIS_CANTINE_REDUITS.forEach(m => {
+    [["ptdej", "Petit-déjeuner"], ["dej", "Déjeuner"]].forEach(([key, label]) => {
+      if (opt[key] === "oui") postes.push({ key:`${key}_reduit_${m}`, cat:"Cantine",
+        label:`${label} ${m} (effectif réduit — montant à définir)`,
+        du:0, paye:0, mois:m, dl:MOIS_DL_5[m], is_reduit:true });
+    });
+  });
+}
+
+// Conserver un ancien mois fusionné déjà facturé/payé sans doubler sa dette.
+function repasReduitHistorique(poste, anciens) {
+  return /^(ptdej|dej)_reduit_/.test(poste.key) && anciens.some(p =>
+    p.key === `cantine_reduit_${poste.mois}` && ((Number(p.du) || 0) > 0 || (Number(p.paye) || 0) > 0));
+}
+
 // ============================================================
 // MAPPING SECTEUR (UI) → POSTES CIBLÉS
 // ============================================================
@@ -242,19 +260,26 @@ var SECT_TO_CAT = {
 };
 
 // ============================================================
-// IMPUTATION D'UN PAIEMENT (règle du premier mois non soldé)
+// IMPUTATION D'UN PAIEMENT (mois chronologiques, Sep → Aoû)
 // ============================================================
+// - postesCibles (optionnel) : liste limitée des postes à imputer — un
+//   secteur comme « Petit-déjeuner » ne cible que les postes `ptdej_*` de
+//   la catégorie Cantine (voir entrees.js, postesDuSecteur).
+// - moisDepart : si c'est un mois, l'imputation commence À CE MOIS-Là (et
+//   non plus au premier mois non soldé) ; sur un mois à effectif réduit dont
+//   le montant n'est pas encore défini, le versement en fixe le montant.
 // Retourne la liste des versements effectués : [{ poste, montant }, ...]
 // Chaque entrée permet de retrouver précisément quel poste a reçu quoi,
 // afin de pouvoir annuler l'opération si le paiement est supprimé.
-function imputerPaiement(postes, cat, montant, moisDepart) {
+function imputerPaiement(postes, cat, montant, moisDepart, postesCibles) {
   const MOIS_ORD = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
-  const idxDepart = moisDepart ? MOIS_ORD.indexOf(moisDepart) : 0;
+  const idxDepart = (moisDepart && MOIS_ORD.includes(moisDepart)) ? MOIS_ORD.indexOf(moisDepart) : 0;
   const allocations = [];
 
   // Pour la Crèche : ne jamais imputer Inscription (inscr) ni Assurance (assur)
   // lors d'un versement mensuel de Crèche (elles ont leurs propres secteurs)
-  const cibles = postes
+  const base = postesCibles || postes.filter(p => p.cat === cat);
+  const cibles = base
     .filter(p => p.cat === cat && !p.is_var && !p.is_remise && p.key !== "avance" && (cat !== "Crèche" || (p.key !== "inscr" && p.key !== "assur")))
     .sort((a, b) => {
       if (cat === "Scolarité") {
@@ -268,21 +293,35 @@ function imputerPaiement(postes, cat, montant, moisDepart) {
       return ai - bi;
     });
 
-  const premierNonSolde = cibles.find(p => (p.paye || 0) < p.du);
-  const debut = premierNonSolde
-    ? Math.min(MOIS_ORD.indexOf(premierNonSolde.mois), idxDepart >= 0 ? idxDepart : Infinity)
-    : idxDepart;
-
   let reste = montant;
   cibles.forEach(p => {
-    if (p.mois && MOIS_ORD.indexOf(p.mois) < debut) return;
     if (reste <= 0) return;
-    const manque = p.du - (p.paye || 0);
+    // Jamais avant le mois choisi (mois choisi = Sep → on commence en Sep)
+    if (p.mois && MOIS_ORD.indexOf(p.mois) < idxDepart) return;
+
+    const manque = Math.max((p.du || 0) - (p.paye || 0), 0);
     if (manque > 0) {
       const versement = Math.min(reste, manque);
       p.paye = (p.paye || 0) + versement;
       allocations.push({ poste: p, montant: versement });
       reste -= versement;
+      return;
+    }
+
+    // Mois à effectif réduit dont le montant n'est pas encore défini, ciblé
+    // explicitement par le versement : le paiement en fixe le montant (plafonné
+    // au tarif de référence du/des service(s) concerné(s) pour ne pas avaler un
+    // versement destiné à plusieurs mois). Voir aussi refPosteReduit.
+    if (reste > 0 && p.is_reduit && !(p.du > 0) && moisDepart && moisDepart === p.mois) {
+      const ref = refPosteReduit(p, cibles);
+      const plafond = ref > 0 ? Math.max(ref - (p.du || 0), 0) : reste;
+      const versement = Math.min(reste, plafond);
+      if (versement > 0) {
+        p.du = (p.du || 0) + versement;
+        p.paye = (p.paye || 0) + versement;
+        allocations.push({ poste: p, montant: versement });
+        reste -= versement;
+      }
     }
   });
 
@@ -299,6 +338,27 @@ function imputerPaiement(postes, cat, montant, moisDepart) {
     allocations.push({ poste: avance, montant: reste });
   }
   return allocations;
+}
+
+// Tarif de référence d'un poste mensuel à effectif réduit (montant saisi
+// manuellement par l'administration) — sert à plafonner un versement qui
+// vient de fixer ce montant : sans plafond, un versement couvrant plusieurs
+// mois serait entièrement absorbé par le premier mois réduit rencontré.
+function refPosteReduit(p, postesRef) {
+  if (p.key.indexOf("ptdej_reduit_") === 0) return 5000;
+  if (p.key.indexOf("dej_reduit_") === 0) return 9000;
+  if (p.key.indexOf("cantc_reduit") === 0) return 13000;
+  if (p.key.indexOf("gout_reduit") === 0) return 3000;
+  if (p.key.indexOf("cantine_reduit") === 0 || p.key.indexOf("ptdej_reduit") === 0 || p.key.indexOf("dej_reduit") === 0) {
+    // Poste fusionné petit-déjeuner + déjeuner (dossiers existants) : la
+    // référence dépend des services réellement présents dans la cible.
+    const src = (postesRef && postesRef.length > 0) ? postesRef : [p];
+    const aPtdej = p.key.indexOf("ptdej_") === 0 || src.some(x => x.key && x.key.indexOf("ptdej_") === 0);
+    const aDej = p.key.indexOf("dej_") === 0 || src.some(x => x.key && x.key.indexOf("dej_") === 0);
+    const ref = (aPtdej ? 5000 : 0) + (aDej ? 9000 : 0);
+    return ref > 0 ? ref : 14000;
+  }
+  return 0;
 }
 
 // ============================================================
@@ -346,31 +406,64 @@ function tRemise(postes) {
   return postes.filter(p => p.is_remise).reduce((s, p) => s + (Number(p.paye) || 0), 0);
 }
 function tReste(postes) {
-  return Math.max(tDu(postes) - tPaye(postes) - tRemise(postes), 0);
+  // Une avance ou un versement libre ne solde pas une autre dette.
+  return postes.filter(p => !p.is_remise && !p.is_var && p.key !== "avance")
+    .reduce((s, p) => s + Math.max((Number(p.du) || 0) - (Number(p.paye) || 0), 0), 0);
 }
 
-// Statut global de paiement d'un enfant : solde / a_jour / partiel / impaye
+// ============================================================
+// STATUT DE PAIEMENT D'UN ENFANT
+// ============================================================
+// Nouveaux statuts (plus de « Partiel » / « Impayé ») :
+//   solde          — tout le dossier est soldé
+//   a_jour         — aucune échéance échue en retard
+//   retard_scol    — échéance en retard sur un poste « scolarité »
+//                    (scolarité, frais généraux, uniformes, fournitures)
+//   retard_creche  — échéance en retard sur un poste rattaché à la Crèche
+//                    (mensualité crèche, halte-garderie)
+//   retard_cantine — échéance en retard sur un repas / un service de garde
+//                    journalier (petit-déjeuner, déjeuner, goûter,
+//                    garderie midi, cantine crèche)
+// Les familles suivent le regroupement déjà utilisé dans le dossier de
+// l'enfant (enfants.js, catAffichage) : Garderie affichée avec la Cantine,
+// Halte-Garderie affichée avec la Crèche.
+var STATUT_FAMILLE_RETARD = {
+  "Crèche": "retard_creche",
+  "Halte-Garderie": "retard_creche",
+  "Cantine": "retard_cantine",
+  "Cantine crèche": "retard_cantine",
+  "Goûter": "retard_cantine",
+  "Garderie": "retard_cantine"
+};
+
+function familleRetardPoste(cat) {
+  return STATUT_FAMILLE_RETARD[cat] || "retard_scol";
+}
+
+// En cas de retards multiples, l'enfant est rattaché à la famille dont le
+// montant en retard est le plus élevé (égalité → scolarité, priorité).
 function statutPaiement(postes) {
-  if (!postes || postes.length === 0) return "impaye";
+  if (!postes || postes.length === 0) return "a_jour";
+
   const du = tDu(postes);
-  const paye = tPaye(postes);
   const reste = tReste(postes);
 
-  // Si aucun montant dû n'est défini et rien n'a été payé : dossier non configuré, jamais "soldé"
-  if (du <= 0 && paye <= 0) return "impaye";
-
-  // Si la totalité du montant dû annuel est entièrement soldée
+  // Dossier entièrement réglé
   if (du > 0 && reste <= 0) return "solde";
 
-  // Si l'enfant n'a rien payé
-  if (paye <= 0) return "impaye";
+  // Aucun dû (dossier non configuré, postes à montant libre uniquement…) :
+  // rien à réclamer, l'enfant est « À jour » — jamais « Soldé ».
+  const detail = posteRetardsDetail(postes);
+  if (detail.length === 0) return "a_jour";
 
-  // Si l'enfant a déjà payé et n'a AUCUN poste échue en retard
-  // (ex. tous les frais généraux de rentrée sont réglés, en attente des prochaines tranches) : À jour
-  if (!enfantEnRetard(postes)) return "a_jour";
+  const totaux = { retard_scol: 0, retard_creche: 0, retard_cantine: 0 };
+  detail.forEach(d => { totaux[familleRetardPoste(d.cat)] += Number(d.manque) || 0; });
 
-  // Sinon, une ou plusieurs échéances échues accusent un retard
-  return "partiel";
+  let famille = "retard_scol";
+  let max = totaux.retard_scol;
+  if (totaux.retard_creche > max) { famille = "retard_creche"; max = totaux.retard_creche; }
+  if (totaux.retard_cantine > max) { famille = "retard_cantine"; }
+  return famille;
 }
 
 // ============================================================

@@ -66,6 +66,7 @@ function renderSortiesList() {
   if (!tbody) return;
 
   const liste = STATE.sorties.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  majCompteurListe(tbody, liste.length);
 
   if (liste.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Aucune dépense enregistrée pour le moment.</td></tr>`;

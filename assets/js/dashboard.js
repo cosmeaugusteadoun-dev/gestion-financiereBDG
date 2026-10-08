@@ -53,20 +53,64 @@ function renderDashboard() {
 }
 
 // ============================================================
+// COMPTEURS DES LISTES — badge « N éléments » en haut de chaque carte
+// ============================================================
+function majBadgeListe(id, n, classeSiNonVide) {
+  const badge = document.getElementById(id);
+  if (!badge) return;
+  badge.textContent = n;
+  badge.className = "badge " + (n === 0 ? "badge-green" : (classeSiNonVide || "badge-gray"));
+}
+
+function majCompteurListe(root, n) {
+  if (!root) return;
+  let compteur = document.getElementById(root.id + "Compteur");
+  if (!compteur) {
+    compteur = document.createElement("p");
+    compteur.id = root.id + "Compteur";
+    compteur.className = "text-muted";
+    const table = root.closest(".table-wrap");
+    (table || root).before(compteur);
+  }
+  compteur.textContent = `${n} élément${n > 1 ? "s" : ""}`;
+}
+
+function correspondStatut(statut, filtre) {
+  return !filtre || statut === filtre || (filtre === "a_jour" && statut === "solde");
+}
+
+// Filtre par statut choisi sur le graphique « Statut des paiements »
+// (variable conservée dans bilans.js : filtreStatutDashActif).
+function statutFiltreDashboard() {
+  return typeof filtreStatutDashActif === "string" ? filtreStatutDashActif : "";
+}
+
+// ============================================================
 // ALERTES DE RETARD
 // ============================================================
 function renderAlertesRetard() {
   const root = document.getElementById("dashAlertes");
   if (!root) return;
 
-  const enfantsRetard = STATE.enfants.map(e => {
+  const filtre = statutFiltreDashboard();
+
+  const tousRetards = STATE.enfants.map(e => {
     const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
     const detail = posteRetardsDetail(postesEnfant);
-    return { enfant: e, detail, total: detail.reduce((s, d) => s + d.manque, 0) };
+    return {
+      enfant: e, detail,
+      total: detail.reduce((s, d) => s + d.manque, 0),
+      statut: statutPaiement(postesEnfant)
+    };
   }).filter(x => x.detail.length > 0).sort((a, b) => b.total - a.total);
 
+  const enfantsRetard = tousRetards.filter(x => correspondStatut(x.statut, filtre));
+  majBadgeListe("dashAlertesBadge", enfantsRetard.length, "badge-red");
+
   if (enfantsRetard.length === 0) {
-    root.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Aucun retard de paiement à signaler.</div>`;
+    root.innerHTML = filtre
+      ? `<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Aucun enfant dans ce statut.</div>`
+      : `<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Aucun retard de paiement à signaler.</div>`;
     return;
   }
 
@@ -108,6 +152,8 @@ function renderAnniversaires() {
     .map(e => ({ enfant: e, jours: joursAvantAnniversaire(e.ddn) }))
     .filter(x => x.jours !== null && x.jours <= 7)
     .sort((a, b) => a.jours - b.jours);
+
+  majBadgeListe("dashAnniversBadge", liste.length);
 
   if (liste.length === 0) {
     root.innerHTML = `<p class="text-muted">Aucun anniversaire dans les 7 prochains jours.</p>`;
@@ -152,6 +198,8 @@ function renderRenouvellementsCreche() {
     .filter(x => x.jours !== null && x.jours <= 14)
     .sort((a, b) => a.jours - b.jours);
 
+  majBadgeListe("dashRenouvBadge", liste.length);
+
   if (liste.length === 0) {
     root.innerHTML = `<p class="text-muted">Aucun renouvellement d'abonnement Crèche dans les 14 prochains jours.</p>`;
     return;
@@ -190,6 +238,8 @@ function renderDerniersPaiements() {
     .sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date))
     .slice(0, 5);
 
+  majBadgeListe("dashDerniersBadge", liste.length);
+
   if (liste.length === 0) {
     root.innerHTML = `<p class="text-muted">Aucun paiement enregistré pour le moment.</p>`;
     return;
@@ -212,6 +262,8 @@ function renderRecettesSecteurDashboard() {
 
   const recettesParSecteur = calculerEncaisseParSecteurBilan();
   const entrees = Object.entries(recettesParSecteur).sort((a, b) => b[1] - a[1]);
+
+  majBadgeListe("dashRecettesBadge", entrees.length);
 
   if (entrees.length === 0) {
     root.innerHTML = `<p class="text-muted">Aucune recette pour le moment.</p>`;
@@ -281,13 +333,20 @@ function renderParentsARelancer() {
   const root = document.getElementById("dashParentsRelancer");
   if (!root) return;
 
-  const aRelancer = STATE.enfants.map(e => {
+  const filtre = statutFiltreDashboard();
+
+  let aRelancer = STATE.enfants.map(e => {
     const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
     return { enfant: e, reste: tReste(postesEnfant), statut: statutPaiement(postesEnfant) };
-  }).filter(x => x.statut !== "solde").sort((a, b) => b.reste - a.reste);
+  }).filter(x => x.reste > 0).sort((a, b) => b.reste - a.reste);
+
+  if (filtre) aRelancer = aRelancer.filter(x => correspondStatut(x.statut, filtre));
+  majBadgeListe("dashRelancerBadge", aRelancer.length, "badge-orange");
 
   if (aRelancer.length === 0) {
-    root.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Aucun parent à relancer pour le moment.</div>`;
+    root.innerHTML = filtre
+      ? `<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Aucun parent dans ce statut.</div>`
+      : `<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Aucun parent à relancer pour le moment.</div>`;
     return;
   }
 

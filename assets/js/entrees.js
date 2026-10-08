@@ -3,6 +3,7 @@
 // ============================================================
 
 var selectedEnfantId = null;
+var enregistrementEntreeEnCours = false;
 var TRANCHE_LABELS_ENTREE = { t1: "1ère tranche", t2: "2ème tranche", t3: "3ème tranche" };
 
 // ============================================================
@@ -22,8 +23,24 @@ function initEntrees() {
   document.getElementById("btnResetEntree").addEventListener("click", resetEntreeForm);
 
   document.querySelectorAll('input[name="eSect"]').forEach(cb => {
-    cb.addEventListener("change", () => cb.closest(".checkbox-item").classList.toggle("checked", cb.checked));
+    cb.addEventListener("change", () => {
+      cb.closest(".checkbox-item").classList.toggle("checked", cb.checked);
+      renderRepartitionEntree();
+    });
   });
+  renderRepartitionEntree();
+}
+
+function renderRepartitionEntree() {
+  const root = document.getElementById("eRepartition");
+  if (!root) return;
+  const anciens = {};
+  root.querySelectorAll("[data-montant-secteur]").forEach(input => { anciens[input.dataset.montantSecteur] = input.value; });
+  const secteurs = Array.from(document.querySelectorAll('input[name="eSect"]:checked')).map(cb => cb.value);
+  root.innerHTML = secteurs.length > 1 ? `
+    <label>Répartition précise (facultative)</label>
+    <p class="field-hint">Laissez les champs vides pour la répartition automatique. Sinon, renseignez chaque secteur ; leur somme doit correspondre au montant du paiement.</p>
+    <div class="form-grid">${secteurs.map(s => `<div class="field"><label>${escapeHtml(s)} (F CFA)</label><input type="number" min="0" step="1" data-montant-secteur="${escapeHtml(s)}" value="${escapeHtml(anciens[s] || "")}" placeholder="Automatique"></div>`).join("")}</div>` : "";
 }
 
 // ============================================================
@@ -32,6 +49,7 @@ function initEntrees() {
 function handleNomInput() {
   selectedEnfantId = null;
   reinitialiserFiltreSecteurs();
+  renderRepartitionEntree();
   const valeur = document.getElementById("eNom").value.trim().toLowerCase();
   const box = document.getElementById("eNomSuggestions");
 
@@ -62,50 +80,133 @@ function handleNomInput() {
 }
 
 // ============================================================
-// FILTRAGE DES SECTEURS SELON LA SECTION DE L'ENFANT SÉLECTIONNÉ
-// Un enfant de la crèche n'a pas de postes "Cantine" (seulement "Cantine
-// crèche") : on grise les secteurs qui ne correspondent à aucun de ses
-// postes réels, pour éviter qu'un paiement parte sur la mauvaise case.
+// SECTEURS DU FORMULAIRE — TOUJOURS CLIQUABLES
 // ============================================================
-// Secteurs toujours cliquables pour un enfant de Maternelle/Primaire, même
-// si le poste correspondant n'existe pas encore (achat d'uniforme ou
-// souscription à la garderie décidés après coup, indépendamment de ce qui
-// a été coché à l'inscription).
-var SECTEURS_TOUJOURS_CLIQUABLES_MAT_PRIM = ["Uniformes", "Garderie"];
-
-// Secteurs à montant libre, ouverts à TOUTES les sections, crèche comprise :
-// le poste est créé au moment du paiement (voir imputerPaiementMultiSecteur).
-// Sans cela, aucun de ces secteurs n'était proposé pour un enfant de crèche
-// (qui n'a ni poste « Uniformes » ni « Fournitures » à la création du dossier)
-// alors que la famille achète pourtant uniforme et fournitures.
-var SECTEURS_MONTANT_LIBRE_TOUJOURS_CLIQUABLES = ["Uniformes", "Fournitures"];
-
-// Catégories dont le montant dépend d'un achat réel, sans "dû" fixe : le
-// poste peut être créé à la volée au moment du paiement (voir
-// imputerPaiementMultiSecteur) au lieu de laisser le versement partir en
-// « Avance / Trop-perçu ».
-var CATEGORIES_MONTANT_LIBRE = ["Uniformes", "Fournitures", "Halte-Garderie"];
-
-function filtrerSecteursSelonEnfant(enfant) {
-  const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
-  const catsDisponibles = new Set(postesEnfant.map(p => p.cat));
-  const keysDisponibles = new Set(postesEnfant.map(p => p.key));
-  const estMatOuPrim = MAT_SECTS.includes(enfant.sect) || PRIM_SECTS.includes(enfant.sect);
-
+// On ne grise plus aucun secteur selon la classe de l'enfant : un service
+// peut être souscrit ou payé en cours d'année, et un secteur sans poste
+// correspondant reçoit un poste à montant libre créé à la volée au moment
+// du paiement (voir crediterPosteLibre). C'est ce filtrage qui laissait
+// uniquement « Inscription » cliquable pour certains élèves, alors que les
+// frais généraux (activités, fêtes, assurance, APE…) sont payables par tous.
+function filtrerSecteursSelonEnfant() {
   document.querySelectorAll("#eSecteurs .checkbox-item").forEach(item => {
     const input = item.querySelector("input");
-    const label = input.value;
-    let ok;
-    if (SECTEURS_MONTANT_LIBRE_TOUJOURS_CLIQUABLES.includes(label)) ok = true;
-    else if (estMatOuPrim && SECTEURS_TOUJOURS_CLIQUABLES_MAT_PRIM.includes(label)) ok = true;
-    else if (SECT_TO_KEY[label]) ok = keysDisponibles.has(SECT_TO_KEY[label]);
-    else if (SECT_TO_CAT[label]) ok = SECT_TO_CAT[label].some(cat => catsDisponibles.has(cat));
-    else ok = true;
-
-    input.disabled = !ok;
-    if (!ok) { input.checked = false; item.classList.remove("checked"); }
-    item.classList.toggle("disabled", !ok);
+    input.disabled = false;
+    item.classList.remove("disabled");
   });
+}
+
+// ============================================================
+// ORDRE D'IMPUTATION DES SECTEURS COCHÉS
+// ============================================================
+// Règle métier : d'abord les FRAIS GÉNÉRAUX (fêtes, activités parascolaires,
+// APE, inscription, assurance), ENSUITE la scolarité ; quand ceux-ci sont
+// réglés seulement ensuite on passe au reste — « ainsi de suite ».
+var SECTEURS_PHASE1_FRAIS_GENERAUX = [
+  "Fêtes scolaires", "Activités parascolaires", "APE", "Inscription", "Assurance",
+  "Scolarité Maternelle", "Scolarité Primaire"
+];
+
+// Mensualités : dans un même paiement, les secteurs de mensualités cochés
+// partagent le montant PROPORTIONNELLEMENT à leurs dettes restantes — un
+// enfant qui règle le petit-déjeuner et le goûter ne doit pas voir tout le
+// montant partir en déjeuner (et inversement). Petit-déjeuner, Déjeuner et
+// Cantine visent la même catégorie : ils sont regroupés en un seul lot.
+var SECTEURS_MENSUALITES = [
+  "Crèche", "Cantine", "Petit-déjeuner", "Déjeuner", "Cantine crèche", "Goûter", "Garderie"
+];
+
+var ORDRE_SECTEURS_ENTREE = [].concat(
+  SECTEURS_PHASE1_FRAIS_GENERAUX,
+  SECTEURS_MENSUALITES,
+  ["Halte-Garderie", "Uniformes", "Fournitures"]
+);
+
+// Catégorie de postes ciblée par chaque secteur (postes créés à la volée
+// compris, pour les avoir dans le dossier et au bilan).
+var SECTEUR_CAT_ALLOCATION = {
+  "Fêtes scolaires": "Fêtes scolaires",
+  "Activités parascolaires": "Activités parascolaires",
+  "APE": "APE",
+  "Inscription": "Inscription",
+  "Assurance": "Assurance",
+  "Scolarité Maternelle": "Scolarité",
+  "Scolarité Primaire": "Scolarité",
+  "Crèche": "Crèche",
+  "Cantine": "Cantine",
+  "Petit-déjeuner": "Cantine",
+  "Déjeuner": "Cantine",
+  "Cantine crèche": "Cantine crèche",
+  "Goûter": "Goûter",
+  "Garderie": "Garderie",
+  "Halte-Garderie": "Halte-Garderie",
+  "Uniformes": "Uniformes",
+  "Fournitures": "Fournitures"
+};
+
+// ============================================================
+// SÉLECTION DES POSTES CIBLÉS PAR UN SECTEUR
+// ============================================================
+// Le Petit-déjeuner et le Déjeuner sont deux secteurs DISTINCTS : un enfant
+// peut payer l'un sans l'autre. Ils ciblent les postes `ptdej_*` / `dej_*`
+// de la catégorie Cantine ; les mois à effectif réduit (poste fusionné
+// `cantine_reduit_*`) sont partagés par les deux services.
+function postesDuSecteur(postes, secteur) {
+  const ok = p => !p.is_remise && !p.is_var && p.key !== "avance";
+
+  if (secteur === "Petit-déjeuner") {
+    return postes.filter(p => ok(p) && p.cat === "Cantine" && (p.key.indexOf("ptdej_") === 0 ||
+      (p.key.indexOf("cantine_reduit_") === 0 && !postes.some(x => x.key === `ptdej_reduit_${p.mois}`))));
+  }
+  if (secteur === "Déjeuner") {
+    return postes.filter(p => ok(p) && p.cat === "Cantine" && (p.key.indexOf("dej_") === 0 ||
+      (p.key.indexOf("cantine_reduit_") === 0 && !postes.some(x => x.key === `dej_reduit_${p.mois}`))));
+  }
+  if (secteur === "Cantine") {
+    return postes.filter(p => ok(p) && p.cat === "Cantine");
+  }
+  if (SECT_TO_KEY[secteur]) {
+    return postes.filter(p => ok(p) && p.key === SECT_TO_KEY[secteur]);
+  }
+  const cats = SECT_TO_CAT[secteur];
+  if (cats) {
+    // Pour la Crèche, Inscription et Assurance ont leurs propres secteurs :
+    // un versement « Crèche » ne doit jamais les solder.
+    return postes.filter(p => ok(p) && cats.includes(p.cat) && !(p.cat === "Crèche" && (p.key === "inscr" || p.key === "assur")));
+  }
+  return [];
+}
+
+// Poids d'un lot de mensualités pour la répartition proportionnelle :
+// somme des montants encore dus sur les postes éligibles, plus le tarif de
+// référence d'un mois à effectif réduit non défini que le mois choisi cible.
+function poidsMensualite(postes, idxDepart, moisDepart) {
+  const MOIS_ORD = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
+  let poids = 0;
+  postes.forEach(p => {
+    if (p.mois && MOIS_ORD.indexOf(p.mois) < idxDepart) return;
+    poids += Math.max((p.du || 0) - (p.paye || 0), 0);
+    if (p.is_reduit && !(p.du > 0) && moisDepart && moisDepart === p.mois) {
+      poids += refPosteReduit(p, postes);
+    }
+  });
+  return poids;
+}
+
+// Poste à montant libre du secteur (créé à la volée si absent) : le
+// versement y est crédité directement, il n'y a pas de « dû » à solder.
+function crediterPosteLibre(postes, secteur, montant, allocations) {
+  const cat = SECTEUR_CAT_ALLOCATION[secteur] || secteur;
+  const key = `var_${secteur.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z]/g, "")}`;
+  let libre = postes.find(p => p.is_var && !p.is_remise && p.cat === cat &&
+    (p.key === key || (p.key !== "avance" && p.label === secteur)));
+  if (!libre) {
+    libre = { key, cat, label: secteur, du: 0, paye: 0, is_var: true };
+    postes.push(libre);
+  }
+  libre.paye = (libre.paye || 0) + montant;
+  allocations.push({ poste: libre, montant });
+  return montant;
 }
 
 function reinitialiserFiltreSecteurs() {
@@ -123,6 +224,7 @@ function resetEntreeForm() {
   document.getElementById("eNomSuggestions").style.display = "none";
   selectedEnfantId = null;
   reinitialiserFiltreSecteurs();
+  renderRepartitionEntree();
 }
 
 // ============================================================
@@ -167,82 +269,164 @@ function imputerPaiementTranche(postes, montant, trancheDepart) {
 
 // ============================================================
 // IMPUTATION D'UN PAIEMENT SUR PLUSIEURS SECTEURS
-// Répartit le montant, secteur par secteur, en s'appuyant sur
-// imputerPaiement() (postes.js) pour la règle du mois consécutif.
 // ============================================================
+// Priorité stricte :
+//   1. les frais généraux (fêtes → activités → APE → inscription →
+//      assurance), puis la scolarité — on ne touche à la scolarité que
+//      quand les frais généraux du paiement sont réglés ;
+//   2. les mensualités cochées (crèche, cantine, goûter, garderie…)
+//      partagent le montant proportionnellement à leurs dettes restantes ;
+//   3. les postes à montant libre (uniformes, fournitures, halte…)
+//      partagent ce qui reste à parts égales ;
+//   4. le surplus finit en « Avance / Trop-perçu ».
 // Retourne la liste des versements effectués : [{ poste, montant }, ...]
 // Nécessaire pour pouvoir annuler précisément ce paiement si l'entrée est
 // supprimée plus tard (voir openDeleteEntreeModal).
-function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart) {
+function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart, repartition, cibleExplicite = false) {
+  if (!Number.isSafeInteger(montantTotal) || montantTotal <= 0) throw new Error("Le montant doit être un nombre entier positif de francs CFA.");
+  secteurs = [...new Set(secteurs)];
+  if (repartition) {
+    if (secteurs.some(s => !Number.isSafeInteger(repartition[s]) || repartition[s] < 0) ||
+        Math.abs(secteurs.reduce((s, sect) => s + repartition[sect], 0) - montantTotal) > 0.001) {
+      throw new Error("La somme des montants par secteur doit correspondre au paiement.");
+    }
+    return secteurs.flatMap(sect => repartition[sect] > 0
+      ? imputerPaiementMultiSecteur(postes, [sect], repartition[sect], moisDepart, null, true).map(a => ({ ...a, secteur: sect })) : []);
+  }
+  // Un versement global de scolarité régularise d'abord tous les frais
+  // généraux du dossier. Une tranche ou une ventilation explicite reste ciblée.
+  if (!cibleExplicite && !["t1", "t2", "t3"].includes(moisDepart) &&
+      secteurs.some(s => ["Scolarité Maternelle", "Scolarité Primaire"].includes(s))) {
+    secteurs = [...new Set(secteurs.concat(Object.keys(SECT_TO_KEY).filter(s => postesDuSecteur(postes, s).length)))];
+  }
+  const MOIS_ORD = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
+  const idxDepart = (moisDepart && MOIS_ORD.includes(moisDepart)) ? MOIS_ORD.indexOf(moisDepart) : 0;
   let reste = montantTotal;
   const allocations = [];
 
-  secteurs.forEach(sect => {
+  const rang = s => { const i = ORDRE_SECTEURS_ENTREE.indexOf(s); return i === -1 ? 999 : i; };
+  const tries = secteurs.slice().sort((a, b) => rang(a) - rang(b));
+
+  // Secteurs sans aucun poste « à dû » → traités comme montant libre (étape 3)
+  const avecDette = [], sansDette = [];
+  tries.forEach(s => (postesDuSecteur(postes, s).length > 0 ? avecDette : sansDette).push(s));
+
+  // ── Étape 1 — frais généraux puis scolarité (priorité stricte) ──
+  avecDette.filter(s => SECTEURS_PHASE1_FRAIS_GENERAUX.includes(s)).forEach(sect => {
     if (reste <= 0) return;
+    const cibles = postesDuSecteur(postes, sect);
 
+    // Secteur ciblé sur une clé unique (Inscription, Fêtes, Activités, APE,
+    // Assurance) : on crédite directement ce poste.
     if (SECT_TO_KEY[sect]) {
-      const poste = postes.find(p => p.key === SECT_TO_KEY[sect]);
-      if (poste) {
-        const manque = Math.max((poste.du || 0) - (poste.paye || 0), 0);
-        const verse = Math.min(reste, manque);
-        if (verse > 0) {
-          poste.paye = (poste.paye || 0) + verse;
-          allocations.push({ poste, montant: verse });
-          reste -= verse;
-        }
+      const poste = cibles[0];
+      const manque = Math.max((poste.du || 0) - (poste.paye || 0), 0);
+      const versement = Math.min(reste, manque);
+      if (versement > 0) {
+        poste.paye = (poste.paye || 0) + versement;
+        allocations.push({ poste, montant: versement });
+        reste -= versement;
       }
-    } else if (SECT_TO_CAT[sect]) {
-      SECT_TO_CAT[sect].forEach(cat => {
-        if (reste <= 0) return;
-
-        // Postes à montant libre (Fournitures, Uniformes, Services ponctuels
-        // crèche...) : pas de "dû" fixe à solder, le versement crédite
-        // directement le poste au lieu de passer par la règle du mois
-        // consécutif (qui ne s'applique qu'aux postes à montant fixe).
-        //
-        // Si l'enfant n'a pas encore ce poste — uniforme ou fournitures
-        // achetés en cours d'année, halte-garderie souscrite après coup — on le
-        // crée à la volée. Sans cela, le versement finissait dans un « Avance /
-        // Trop-perçu » : le dossier affichait un trop-perçu alors que c'est un
-        // achat réel, et le secteur concerné restait à 0 F au bilan.
-        let posteVar = postes.find(p => p.cat === cat && p.is_var);
-        if (!posteVar && CATEGORIES_MONTANT_LIBRE.includes(cat)) {
-          posteVar = { key: `var_${cat.toLowerCase().replace(/[^a-z]/g, "")}`, cat, label: cat, du: 0, paye: 0, is_var: true };
-          postes.push(posteVar);
-        }
-        if (posteVar) {
-          posteVar.paye = (posteVar.paye || 0) + reste;
-          allocations.push({ poste: posteVar, montant: reste });
-          reste = 0;
-          return;
-        }
-
-        // Paiement ciblé sur une tranche précise (Scolarité) : on court-
-        // circuite la règle générale pour créditer directement la tranche
-        // demandée, sans toucher à l'inscription ni aux frais généraux.
-        if (cat === "Scolarité" && ["t1", "t2", "t3"].includes(moisDepart)) {
-          allocations.push(...imputerPaiementTranche(postes, reste, moisDepart));
-          reste = 0;
-          return;
-        }
-
-        const cibles = postes.filter(p => p.cat === cat && !p.is_var && !p.is_remise && p.key !== "avance");
-        const manqueTotal = cibles.reduce((s, p) => s + Math.max((p.du || 0) - (p.paye || 0), 0), 0);
-        const allouer = Math.min(reste, manqueTotal);
-        if (allouer > 0) {
-          allocations.push(...imputerPaiement(postes, cat, allouer, moisDepart));
-          reste -= allouer;
-        }
-      });
+      return;
     }
+
+    // Scolarité : inscription puis tranches (imputerPaiement), ou paiement
+    // ciblé sur une tranche précise (t1/t2/t3).
+    const cat = SECTEUR_CAT_ALLOCATION[sect] || sect;
+    const manque = cibles.reduce((s, p) => s + Math.max((p.du || 0) - (p.paye || 0), 0), 0);
+    const allouer = Math.min(reste, manque);
+    if (allouer <= 0) return;
+
+    const allocs = (moisDepart === "t1" || moisDepart === "t2" || moisDepart === "t3")
+      ? imputerPaiementTranche(postes, allouer, moisDepart)
+      : imputerPaiement(postes, cat, allouer, moisDepart);
+    allocs.forEach(a => allocations.push(a));
+    reste -= allouer;
   });
+
+  // ── Étape 2 — mensualités : part proportionnelle aux dettes restantes ──
+  const groupesParCat = {};
+  avecDette.filter(s => SECTEURS_MENSUALITES.includes(s)).forEach(sect => {
+    const cat = SECTEUR_CAT_ALLOCATION[sect] || sect;
+    const cle = sect;
+    if (!groupesParCat[cle]) groupesParCat[cle] = { cat, secteur: sect, postes: [] };
+    postesDuSecteur(postes, sect).forEach(p => {
+      if (!Object.values(groupesParCat).some(g => g.postes.includes(p))) groupesParCat[cle].postes.push(p);
+    });
+  });
+  const groupes = Object.keys(groupesParCat).map(k => groupesParCat[k]);
+
+  if (reste > 0 && groupes.length > 0) {
+    groupes.forEach(g => { g.poids = poidsMensualite(g.postes, idxDepart, moisDepart); });
+    const totalPoids = groupes.reduce((s, g) => s + g.poids, 0);
+    let alloues;
+
+    if (totalPoids <= 0) {
+      alloues = groupes.map(() => 0);
+    } else if (reste >= totalPoids) {
+      // Assez pour tout solder : chaque lot reçoit le montant de sa dette.
+      alloues = groupes.map(g => g.poids);
+      reste -= totalPoids;
+    } else {
+      // Montant insuffisant : chaque lot reçoit sa part proportionnelle.
+      alloues = groupes.map(g => Math.floor((reste * g.poids) / totalPoids));
+      let ecart = reste - alloues.reduce((s, a) => s + a, 0);
+      const indices = groupes.map((g, i) => i).sort((a, b) => groupes[b].poids - groupes[a].poids);
+      let k = 0;
+      while (ecart > 0 && indices.length > 0) { alloues[indices[k % indices.length]]++; k++; ecart--; }
+      reste = 0;
+    }
+
+    groupes.forEach((g, i) => {
+      if (alloues[i] <= 0) return;
+      imputerPaiement(postes, g.cat, alloues[i], moisDepart, g.postes)
+        .forEach(a => allocations.push({ ...a, secteur: g.secteur }));
+    });
+  }
+
+  // ── Étape 3 — postes restants : d'abord les dettes fixes, puis le
+  // montant libre (parts égales entre les secteurs concernés) ──
+  const resteAVirer = tries.filter(s => {
+    if (postesDuSecteur(postes, s).length === 0) return true;
+    return !SECTEURS_PHASE1_FRAIS_GENERAUX.includes(s) && !SECTEURS_MENSUALITES.includes(s);
+  });
+
+  // Dettes fixes non couvertes par les étapes 1 et 2 (ex. uniforme à
+  // montant fixe saisi à la création du dossier)
+  resteAVirer.forEach(sect => {
+    if (reste <= 0) return;
+    const cibles = postesDuSecteur(postes, sect);
+    if (cibles.length === 0) return;
+    const manque = cibles.reduce((s, p) => s + Math.max((p.du || 0) - (p.paye || 0), 0), 0);
+    const allouer = Math.min(reste, manque);
+    if (allouer <= 0) return;
+    imputerPaiement(postes, SECTEUR_CAT_ALLOCATION[sect] || sect, allouer, moisDepart)
+      .forEach(a => allocations.push(a));
+    reste -= allouer;
+  });
+
+  // Montant libre (uniformes, fournitures, halte-garderie, secteur sans
+  // poste…) : pas de « dû » à répartir, on partage ce qui reste à parts
+  // égales entre les secteurs cochés.
+  const secteursLibres = resteAVirer.filter(s => postesDuSecteur(postes, s).length === 0);
+  if (reste > 0 && secteursLibres.length > 0) {
+    const part = Math.floor(reste / secteursLibres.length);
+    let ecart = reste - part * secteursLibres.length;
+    secteursLibres.forEach(sect => {
+      const montantPart = part + (ecart > 0 ? 1 : 0);
+      if (ecart > 0) ecart--;
+      if (montantPart > 0) crediterPosteLibre(postes, sect, montantPart, allocations);
+    });
+    reste = 0;
+  }
 
   // Surplus final (aucune dette restante dans les secteurs sélectionnés)
   if (reste > 0) {
-    const cibleCat = secteurs[0] || "Général";
-    let avance = postes.find(p => p.key === "avance" && p.cat === cibleCat);
+    const sectCible = tries[0] || secteurs[0] || "Général";
+    const catAvance = SECTEUR_CAT_ALLOCATION[sectCible] || sectCible;
+    let avance = postes.find(p => p.key === "avance" && p.cat === catAvance);
     if (!avance) {
-      avance = { key: "avance", cat: cibleCat, label: "Avance / Trop-perçu", du: 0, paye: 0, is_var: true };
+      avance = { key: "avance", cat: catAvance, label: "Avance / Trop-perçu", du: 0, paye: 0, is_var: true };
       postes.push(avance);
     }
     avance.paye = (avance.paye || 0) + reste;
@@ -253,10 +437,33 @@ function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart)
 }
 
 // ============================================================
+// COMPLÉTION DES POSTES D'UN DOSSIER
+// ============================================================
+// Certains dossiers (créés par une version antérieure du logiciel, ou
+// synchronisés hors ligne) n'ont pas tous les postes standards — typiquement
+// les frais généraux (activités parascolaires, fêtes scolaires, assurance,
+// APE) d'un élève de Maternelle/Primaire. On les recrée à partir de
+// buildPostes() sans jamais toucher aux postes existants ni à leurs montants
+// déjà payés. Le paiement en cours persiste ensuite les postes via
+// dbUpsertPostes (voir handleCreateEntree).
+function completerPostesEnfant(enfant) {
+  const cles = new Set(STATE.postes.filter(p => p.enfant_id === enfant.id).map(p => p.key));
+  const attendus = fabriquerPostesEnfant(enfant.id, enfant.sect, enfant.stat, enfant.opt || {});
+  const existants = STATE.postes.filter(p => p.enfant_id === enfant.id);
+  const manquants = attendus.filter(np => !cles.has(np.key) && !repasReduitHistorique(np, existants));
+  if (manquants.length > 0) {
+    console.warn(`Postes manquants complétés pour ${enfant.nom} : ${manquants.map(p => p.key).join(", ")}`);
+    STATE.postes.push(...manquants);
+  }
+  return manquants;
+}
+
+// ============================================================
 // ENREGISTREMENT D'UN PAIEMENT
 // ============================================================
 async function handleCreateEntree(e) {
   e.preventDefault();
+  if (enregistrementEntreeEnCours) return;
 
   const date = document.getElementById("eDate").value;
   const nom = document.getElementById("eNom").value.trim();
@@ -265,8 +472,11 @@ async function handleCreateEntree(e) {
   const moisDepart = document.getElementById("eMois").value || null;
   const note = document.getElementById("eNote").value.trim();
   const secteurs = Array.from(document.querySelectorAll('input[name="eSect"]:checked')).map(cb => cb.value);
+  const champsRepartition = Array.from(document.querySelectorAll("#eRepartition [data-montant-secteur]"));
+  const repartition = champsRepartition.some(input => input.value !== "")
+    ? Object.fromEntries(champsRepartition.map(input => [input.dataset.montantSecteur, input.value === "" ? NaN : Number(input.value)])) : null;
 
-  if (!date || !nom || !montant || montant <= 0) {
+  if (!date || !nom || !Number.isSafeInteger(montant) || montant <= 0) {
     showToast("Veuillez renseigner la date, le nom et un montant valide.", "error");
     return;
   }
@@ -274,26 +484,26 @@ async function handleCreateEntree(e) {
     showToast("Sélectionnez au moins un secteur concerné par ce paiement.", "error");
     return;
   }
+  if (repartition && (secteurs.some(s => !Number.isSafeInteger(repartition[s]) || repartition[s] < 0) ||
+      Math.abs(secteurs.reduce((s, sect) => s + repartition[sect], 0) - montant) > 0.001)) {
+    showToast("Renseignez chaque secteur ; leur somme doit correspondre au montant du paiement.", "error");
+    return;
+  }
 
   const enfant = selectedEnfantId
     ? STATE.enfants.find(x => x.id === selectedEnfantId)
     : STATE.enfants.find(x => x.nom.toLowerCase() === nom.toLowerCase());
 
-  // Mois à effectif réduit (mars/juin/septembre) : si le montant n'a pas
-  // encore été défini dans le dossier (icône crayon), on refuse le
-  // paiement plutôt que de le laisser glisser silencieusement sur le mois
-  // suivant (règle du paiement consécutif — la case "à définir" vaut 0 F
-  // dû, donc "déjà soldée" tant que personne n'a fixé le vrai montant).
-  if (enfant && moisDepart && MOIS_CANTINE_REDUITS.includes(moisDepart)) {
-    const postesEnfantCheck = STATE.postes.filter(p => p.enfant_id === enfant.id);
-    const catsCiblees = new Set();
-    secteurs.forEach(sect => { if (SECT_TO_CAT[sect]) SECT_TO_CAT[sect].forEach(c => catsCiblees.add(c)); });
-    const posteNonDefini = postesEnfantCheck.find(p => p.is_reduit && p.mois === moisDepart && catsCiblees.has(p.cat) && !p.du);
-    if (posteNonDefini) {
-      showToast(`Le montant de "${posteNonDefini.label}" n'est pas encore défini. Définissez-le d'abord dans le dossier de l'enfant (icône crayon) avant d'enregistrer ce paiement.`, "error");
-      return;
-    }
-  }
+  // Les secteurs sont imputés et enregistrés dans l'ordre de priorité :
+  // frais généraux d'abord, puis scolarité, puis mensualités, puis montant
+  // libre (voir ORDRE_SECTEURS_ENTREE). Les mois à effectif réduit ne
+  // bloquent plus le paiement : un versement ciblé sur un tel mois en fixe
+  // automatiquement le montant (voir imputerPaiement, postes.js).
+  secteurs.sort((a, b) => {
+    const ia = ORDRE_SECTEURS_ENTREE.indexOf(a);
+    const ib = ORDRE_SECTEURS_ENTREE.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
 
   const entree = {
     id: uid("ent"), date, nom, enfant_id: enfant ? enfant.id : null,
@@ -302,18 +512,28 @@ async function handleCreateEntree(e) {
   };
 
   let detailCible = "";
+  const postesAvant = STATE.postes.map(p => ({ ...p }));
+  let entreeEnregistree = false;
+  enregistrementEntreeEnCours = true;
+  const bouton = document.querySelector('#formEntree button[type="submit"]');
+  if (bouton) bouton.disabled = true;
 
   try {
     let postesEnfant = [];
 
     if (enfant) {
-      postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
-      const allocations = imputerPaiementMultiSecteur(postesEnfant, secteurs, montant, moisDepart);
+      // Complète d'abord les postes standards absents du dossier (frais
+      // généraux non générés par une version antérieure du logiciel…) :
+      // sans eux, les secteurs correspondants n'auraient rien à créditer.
+      completerPostesEnfant(enfant);
+      postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id).map(p => ({ ...p }));
+      const allocations = imputerPaiementMultiSecteur(postesEnfant, secteurs, montant, moisDepart, repartition);
 
       // Notifie le versé/restant de l'échéance ciblée (mois ou tranche) —
       // utile surtout quand le paiement ne la solde pas entièrement.
-      if (moisDepart) {
-        const posteCible = postesEnfant.find(p => (p.mois === moisDepart || p.key === moisDepart) && !p.is_var && !p.is_remise);
+      if (moisDepart && allocations.length > 0) {
+        const posteCible = allocations.map(a => a.poste).find(p => p.mois === moisDepart || p.key === moisDepart)
+          || postesEnfant.find(p => (p.mois === moisDepart || p.key === moisDepart) && !p.is_var && !p.is_remise);
         if (posteCible) {
           const resteCible = Math.max((posteCible.du || 0) - (posteCible.paye || 0), 0);
           const labelCible = TRANCHE_LABELS_ENTREE[moisDepart] || moisDepart;
@@ -329,17 +549,17 @@ async function handleCreateEntree(e) {
         if (!p.id) {
           p.id = uid("pst");
           p.enfant_id = enfant.id;
-          STATE.postes.push(p);
         }
       });
 
       // Trace précisément quel poste a reçu quoi, pour pouvoir annuler
       // ce paiement proprement si l'entrée est supprimée plus tard.
-      entree.allocations = allocations.map(a => ({ poste_id: a.poste.id, montant: a.montant }));
+      entree.allocations = allocations.map(a => ({ poste_id: a.poste.id, montant: a.montant,
+        secteur: a.secteur || secteurEnregistrementPoste(a.poste, enfant), poste: { ...a.poste } }));
     }
 
     await dbInsertEntree(entree);
-    STATE.entrees.unshift(entree);
+    entreeEnregistree = true;
 
     if (enfant) {
       await dbUpsertPostes(postesEnfant);
@@ -347,6 +567,8 @@ async function handleCreateEntree(e) {
       // saisies pour l'enfant, utilisez le bouton "Envoyer bilan WhatsApp"
       // de son dossier (onglet Dossiers enfants ou onglet WhatsApp).
     }
+    STATE.entrees.unshift(entree);
+    if (enfant) STATE.postes = STATE.postes.filter(p => p.enfant_id !== enfant.id).concat(postesEnfant);
 
     resetEntreeForm();
     refreshAllTabs();
@@ -355,7 +577,20 @@ async function handleCreateEntree(e) {
     if (enfant) openConfirmerEnvoiRecuModal(enfant, entree);
   } catch (err) {
     console.error(err);
+    STATE.postes = postesAvant;
+    if (entreeEnregistree) {
+      // Le paiement est déjà reçu en base : ne pas proposer de le saisir
+      // une seconde fois si seule la mise à jour du dossier a échoué.
+      STATE.entrees.unshift(entree);
+      resetEntreeForm();
+      refreshAllTabs();
+      showToast("Paiement enregistré, mais le dossier n’a pas pu être mis à jour. Ne ressaisissez pas le paiement ; rechargez pour synchroniser.", "error");
+      return;
+    }
     showToast("Erreur lors de l'enregistrement du paiement : " + err.message, "error");
+  } finally {
+    enregistrementEntreeEnCours = false;
+    if (bouton) bouton.disabled = false;
   }
 }
 
@@ -389,15 +624,16 @@ function renderEntreesMetrics() {
   if (!root) return;
 
   const total = STATE.entrees.reduce((s, e) => s + (Number(e.mt) || 0), 0);
-  const recettesParSecteur = calculerRecettesParSecteur();
-  // Inscription, Activités parascolaires et Fêtes scolaires sont presque
-  // toujours réglées ensemble en un seul paiement multi-secteurs ; comme
-  // calculerRecettesParSecteur compte le montant total sous CHAQUE secteur
-  // coché (sans répartition), ces trois-là affichaient des montants faux
-  // (gonflés) ici — on les exclut de ce mini-bilan.
-  const SECTEURS_EXCLUS_MINI_BILAN = ["Inscription", "Activités parascolaires", "Fêtes scolaires"];
+  const recettesParSecteur = calculerRecettesParSecteur(true);
+  const ventilation = document.getElementById("entreesVentilation");
+  if (ventilation) {
+    const secteurs = Object.entries(recettesParSecteur).sort((a, b) => b[1] - a[1]);
+    majCompteurListe(ventilation, secteurs.length);
+    ventilation.innerHTML = secteurs.length ? secteurs.map(([sect, mt]) =>
+      `<div class="poste-row"><div class="poste-label">${escapeHtml(sect)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>`).join("")
+      : '<p class="text-muted">Aucun encaissement enregistré.</p>';
+  }
   const topSecteurs = Object.entries(recettesParSecteur)
-    .filter(([sect]) => !SECTEURS_EXCLUS_MINI_BILAN.includes(sect))
     .sort((a, b) => b[1] - a[1]).slice(0, 3);
 
   const tuilesSecteurs = topSecteurs.map(([sect, mt], i) => {
@@ -419,6 +655,7 @@ function renderEntreesList() {
   renderEntreesMetrics();
 
   const liste = STATE.entrees.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  majCompteurListe(tbody, liste.length);
 
   if (liste.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Aucun paiement enregistré pour le moment.</td></tr>`;
@@ -473,16 +710,32 @@ function openDeleteEntreeModal(entreeId) {
     onConfirm: async () => {
       try {
         const postesTouches = [];
+        const originaux = [];
         (entree.allocations || []).forEach(a => {
           const poste = STATE.postes.find(p => p.id === a.poste_id);
           if (poste) {
-            poste.paye = Math.max((poste.paye || 0) - (a.montant || 0), 0);
-            postesTouches.push(poste);
+            let copie = postesTouches.find(p => p.id === poste.id);
+            if (!copie) {
+              copie = { ...poste };
+              postesTouches.push(copie);
+              originaux.push({ ...poste });
+            }
+            copie.paye = Math.max((copie.paye || 0) - (Number(a.montant) || 0), 0);
           }
         });
         if (postesTouches.length > 0) await dbUpsertPostes(postesTouches);
 
-        await dbDeleteEntree(entree.id);
+        try {
+          await dbDeleteEntree(entree.id);
+        } catch (err) {
+          // Si la suppression de l'entrée échoue, rétablir ses crédits.
+          if (originaux.length > 0) await dbUpsertPostes(originaux);
+          throw err;
+        }
+        postesTouches.forEach(copie => {
+          const poste = STATE.postes.find(p => p.id === copie.id);
+          if (poste) Object.assign(poste, copie);
+        });
         STATE.entrees = STATE.entrees.filter(e => e.id !== entree.id);
         refreshAllTabs();
         showToast(

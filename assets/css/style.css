@@ -1089,6 +1089,25 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 
 /* ============================================================
+   TABLEAU DE BORD — ordre des cartes sur mobile
+   Les anniversaires à venir passent AU-DESSUS des listes
+   « Sans date de naissance » et « Alertes de retard » (demande) :
+   le tableau de bord devient une colonne flexible et chaque carte
+   reçoit un rang explicite, le DOM restant inchangé sur desktop.
+   ============================================================ */
+@media (max-width: 899px) {
+  #tab-dashboard.tab-panel.active { display: flex; flex-direction: column; }
+  #tab-dashboard > .section-header { order: 1; }
+  #tab-dashboard > #dashMetrics   { order: 2; }
+  #tab-dashboard > #dashCharts    { order: 3; }
+  #tab-dashboard > #cardAnniversaires { order: 4; }
+  #tab-dashboard > .charts-grid   { order: 5; }
+  #tab-dashboard > #cardRelancer  { order: 6; }
+  #tab-dashboard > #cardRenouv    { order: 7; }
+  #tab-dashboard > #cardDerniers  { order: 8; }
+}
+
+/* ============================================================
    IMPRESSION — fiche enfant
    ============================================================ */
 @media print {

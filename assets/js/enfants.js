@@ -196,12 +196,12 @@ function fabriquerPostesEnfant(enfantId, sect, stat, opt) {
 // Préserve les montants déjà payés sur les services conservés.
 // ============================================================
 function reconcilerPostes(enfant, newOpt) {
-  const anciens = STATE.postes.filter(p => p.enfant_id === enfant.id);
+  const anciens = STATE.postes.filter(p => p.enfant_id === enfant.id).map(p => ({ ...p }));
 
   // Annule d'abord le crédit de l'ancienne remise (si présente), pour
   // repartir d'un historique de paiements "propre" avant d'appliquer la
   // nouvelle — sinon une remise modifiée s'additionnerait à l'ancienne.
-  (enfant.opt.remise_allocations || []).forEach(a => {
+  ((enfant.opt || {}).remise_allocations || []).forEach(a => {
     const poste = anciens.find(p => p.id === a.poste_id);
     if (poste) poste.paye = Math.max((poste.paye || 0) - (a.montant || 0), 0);
   });
@@ -209,13 +209,13 @@ function reconcilerPostes(enfant, newOpt) {
   const ancienParKey = {};
   anciens.forEach(p => { ancienParKey[p.key] = p; });
 
-  const nouveauxBruts = buildPostes(enfant.sect, enfant.stat, newOpt);
+  const nouveauxBruts = buildPostes(enfant.sect, enfant.stat, newOpt).filter(p => !repasReduitHistorique(p, anciens));
   const resultat = [];
 
   nouveauxBruts.forEach(np => {
     const anc = ancienParKey[np.key];
     resultat.push({
-      id: `${enfant.id}_${np.key}`,
+      id: anc ? anc.id : `${enfant.id}_${np.key}`,
       enfant_id: enfant.id,
       key: np.key, cat: np.cat, label: np.label,
       // Mois à effectif réduit : le montant est saisi manuellement par
@@ -233,7 +233,7 @@ function reconcilerPostes(enfant, newOpt) {
   // Postes correspondant à un service désormais désactivé : conservés
   // seulement si un montant y a déjà été versé (historique préservé)
   Object.values(ancienParKey).forEach(p => {
-    if ((p.paye || 0) > 0) resultat.push(p);
+    if ((p.paye || 0) > 0 || (p.key.indexOf("cantine_reduit_") === 0 && p.du > 0)) resultat.push(p);
   });
 
   // Applique la nouvelle remise directement sur les postes réels, comme un
@@ -262,9 +262,10 @@ function renderEnfantsList() {
     const cible = filtreStatut === "scol_solde" ? "solde" : "impaye";
     liste = liste.filter(e => statutScolarite(STATE.postes.filter(p => p.enfant_id === e.id)) === cible);
   } else if (filtreStatut) {
-    liste = liste.filter(e => statutPaiement(STATE.postes.filter(p => p.enfant_id === e.id)) === filtreStatut);
+    liste = liste.filter(e => correspondStatut(statutPaiement(STATE.postes.filter(p => p.enfant_id === e.id)), filtreStatut));
   }
   liste = liste.slice().sort((a, b) => a.nom.localeCompare(b.nom));
+  majCompteurListe(root, liste.length);
 
   if (liste.length === 0) {
     root.innerHTML = `<div class="empty-state"><div class="icon"><i class="bi bi-people"></i></div>Aucun dossier ne correspond à votre recherche.</div>`;
@@ -276,10 +277,11 @@ function renderEnfantsList() {
 }
 
 var STATUT_INFO = {
-  solde:   { badge: "badge-green",  icon: "bi-check-circle-fill",       texte: "Soldé" },
-  a_jour:  { badge: "badge-green",  icon: "bi-check-circle-fill",       texte: "À jour" },
-  partiel: { badge: "badge-orange", icon: "bi-exclamation-circle-fill", texte: "Partiel" },
-  impaye:  { badge: "badge-red",    icon: "bi-x-circle-fill",           texte: "Impayé" }
+  solde:          { badge: "badge-green",  icon: "bi-check-circle-fill",      texte: "Soldé" },
+  a_jour:         { badge: "badge-green",  icon: "bi-check-circle-fill",      texte: "À jour" },
+  retard_scol:    { badge: "badge-red",    icon: "bi-exclamation-triangle-fill", texte: "Retard de scolarité" },
+  retard_creche:  { badge: "badge-orange", icon: "bi-exclamation-circle-fill",   texte: "Retard de crèche" },
+  retard_cantine: { badge: "badge-orange", icon: "bi-cup-hot-fill",              texte: "Retard de cantine" }
 };
 
 // Statut de la Scolarité seule (Inscription + tranches, cat "Scolarité") —
@@ -298,7 +300,7 @@ function statutScolarite(postesEnfant) {
 function renderEnfantItem(e) {
   const postesEnfant = STATE.postes.filter(p => p.enfant_id === e.id);
   const statut = statutPaiement(postesEnfant);
-  const info = STATUT_INFO[statut] || STATUT_INFO.impaye;
+  const info = STATUT_INFO[statut] || STATUT_INFO.a_jour;
   const isOpen = openIds.has(e.id);
 
   // Regroupement des postes par catégorie (hors remise, gérée à part)
@@ -310,7 +312,8 @@ function renderEnfantItem(e) {
   // au Goûter, qui lui reste séparé (voir plus bas) car il peut être payé
   // indépendamment et créait un total mensuel trompeur une fois regroupé.
   const categories = {};
-  postesEnfant.filter(p => !p.is_remise).forEach(p => {
+  postesEnfant.filter(p => !p.is_remise && !(p.key.indexOf("cantine_reduit_") === 0 &&
+    !(p.du > 0) && !(p.paye > 0) && postesEnfant.some(x => x.mois === p.mois && /^(ptdej|dej)_reduit_/.test(x.key)))).forEach(p => {
     const catAffichage = PONCTUEL_CRECHE_CATS.includes(p.cat) ? "Crèche" : p.cat === "Garderie" ? "Cantine" : p.cat;
     if (!categories[catAffichage]) categories[catAffichage] = [];
     categories[catAffichage].push(p);
@@ -354,6 +357,19 @@ function renderEnfantItem(e) {
   }
 
   const MOIS_ORDRE_AFFICHAGE = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
+
+  // Les postes sont triés chronologiquement (Sep → Aoû) au sein de chaque
+  // catégorie : l'ordre renvoyé par la base n'est pas garanti et le dossier
+  // affichait parfois Février avant Avril, puis Octobre…
+  const ORDRE_KEYS_SANS_MOIS = ["inscr","t1","t2","t3","act","fetes","assur","ape","halte","unif","unif_tenue","unif_sport","four","avance"];
+  const rangPoste = p => {
+    if (p.mois) return MOIS_ORDRE_AFFICHAGE.indexOf(p.mois);
+    const i = ORDRE_KEYS_SANS_MOIS.indexOf(p.key);
+    return 100 + (i === -1 ? 50 : i);
+  };
+  Object.keys(categories).forEach(cat => {
+    categories[cat].sort((a, b) => rangPoste(a) - rangPoste(b));
+  });
 
   // Ordre d'affichage des catégories : Inscription, Scolarité, Assurance, APE,
   // Activités, Fêtes, Goûter, Crèche, Uniformes, Fournitures, et Cantine EN BAS.
@@ -404,10 +420,15 @@ function renderEnfantItem(e) {
         }).join("")
         + horsMois.map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p))).join("");
     } else {
-      lignes = categories[cat].map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p), p.is_reduit ? p.id : null, p.is_reduit && !p.du)).join("");
+      lignes = categories[cat].map(p => {
+        // Le libellé « montant à définir » n'a plus lieu d'être une fois le
+        // montant saisi au crayon — ou fixé par un versement ciblé sur ce mois.
+        const label = (p.is_reduit && p.du > 0) ? p.label.replace(" — montant à définir", "") : p.label;
+        return renderPosteRow(label, p.du, p.paye, p.is_var, posteEnRetard(p), p.is_reduit ? p.id : null, p.is_reduit && !p.du);
+      }).join("");
     }
 
-    return `<div class="postes-cat"><div class="postes-cat-title">${escapeHtml(cat)}</div>${lignes}</div>`;
+    return `<div class="postes-cat"><div class="postes-cat-title">${escapeHtml(cat)} <span class="badge badge-gray">${(lignes.match(/class="poste-row"/g) || []).length}</span></div>${lignes}</div>`;
   }).join("");
 
   const historique = STATE.entrees
@@ -449,7 +470,7 @@ function renderEnfantItem(e) {
         </div>
 
         <div class="postes-cat">
-          <div class="postes-cat-title">Historique des paiements</div>
+          <div class="postes-cat-title">Historique des paiements <span class="badge badge-gray">${STATE.entrees.filter(en => en.enfant_id === e.id).length}</span></div>
           <div class="timeline">${historique || '<p class="text-muted">Aucun paiement enregistré.</p>'}</div>
         </div>
 
@@ -555,7 +576,7 @@ function openEditOptionsModal(enfantId) {
     { key: "ptdej",   label: "Petit-déjeuner" },
     { key: "dej",     label: "Déjeuner" },
     { key: "gout",    label: "Goûter" },
-    { key: "gard",    label: "Garderie midi (3 000 F/mois)" },
+    { key: "gard",    label: "Garderie" },
     { key: "four",    label: "Fournitures (montant libre)" },
     { key: "cantC",   label: "Cantine crèche" },
     { key: "halte",   label: "Halte-garderie / Samedi / Nuitée" }
@@ -918,14 +939,66 @@ async function synchroniserEtReparerDossiers() {
       modifs = true;
     }
 
-    // 2. Régularisation des inscriptions enregistrées mais restant à 0 versé
+    // 2. Postes standards manquants (dossier créé par une version
+    // antérieure du logiciel, options non regénérées…) : les frais généraux
+    // (activités, fêtes, assurance, APE…) doivent exister pour que les
+    // secteurs correspondants soient proposés et que les montants dûs
+    // soient justes. Voir aussi entrees.js, completerPostesEnfant.
+    const postesCompletes = completerPostesEnfant(enfant);
+    if (postesCompletes.length > 0) {
+      postesAMettreAJour.push(...postesCompletes);
+      postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
+      modifs = true;
+    }
+
+    // Restaurer les allocations enregistrées lorsque l'entrée a été
+    // sauvegardée mais que la mise à jour des postes a échoué. Ne jamais
+    // additionner ces sommes à nouveau à chaque ouverture de l'application.
+    const versesTraces = new Map();
+    STATE.entrees.filter(en => en.enfant_id === enfant.id).forEach(en => {
+      (en.allocations || []).forEach(a => {
+        let poste = postesEnfant.find(p => p.id === a.poste_id);
+        if (!poste && a.poste && a.poste.id === a.poste_id && a.poste.enfant_id === enfant.id) {
+          poste = { ...a.poste, paye: 0 };
+          postesEnfant.push(poste);
+          STATE.postes.push(poste);
+        }
+        if (!poste) return;
+        if (poste.is_reduit && !(poste.du > 0) && a.poste && a.poste.du > 0) {
+          poste.du = a.poste.du;
+          postesAMettreAJour.push(poste);
+          modifs = true;
+        }
+        versesTraces.set(poste.id, (versesTraces.get(poste.id) || 0) + (Number(a.montant) || 0));
+      });
+    });
+    ((enfant.opt || {}).remise_allocations || []).forEach(a => {
+      versesTraces.set(a.poste_id, (versesTraces.get(a.poste_id) || 0) + (Number(a.montant) || 0));
+    });
+    versesTraces.forEach((montant, id) => {
+      const poste = postesEnfant.find(p => p.id === id);
+      if (poste && (Number(poste.paye) || 0) < montant) {
+        poste.paye = montant;
+        postesAMettreAJour.push(poste);
+        modifs = true;
+      }
+    });
+
+    // 3. Régularisation des inscriptions enregistrées mais restant à 0 versé
     const entreesInscr = STATE.entrees.filter(en => en.enfant_id === enfant.id && (
       (en.sect || "").includes("Inscription") ||
       (en.note || "").toLowerCase().includes("inscription") ||
       (en.note || "").toLowerCase().includes("réinscription")
     ));
-    const totalInscrEntrees = entreesInscr.reduce((s, en) => s + (Number(en.mt) || 0), 0);
     const posteInscr = postesEnfant.find(p => p.key === "inscr");
+    const totalInscrEntrees = entreesInscr.reduce((s, en) => {
+      if (Array.isArray(en.allocations) && en.allocations.length) {
+        return s + en.allocations.filter(a => posteInscr && a.poste_id === posteInscr.id)
+          .reduce((t, a) => t + (Number(a.montant) || 0), 0);
+      }
+      // Sans trace, seul un paiement exclusivement d'inscription est sûr.
+      return s + ((en.sect || "").trim() === "Inscription" ? (Number(en.mt) || 0) : 0);
+    }, 0);
 
     if (posteInscr && totalInscrEntrees > 0 && (posteInscr.paye || 0) < Math.min(posteInscr.du, totalInscrEntrees)) {
       console.log(`Régularisation inscription pour ${enfant.nom} : ${totalInscrEntrees} F CFA`);
@@ -937,10 +1010,9 @@ async function synchroniserEtReparerDossiers() {
 
   if (modifs && postesAMettreAJour.length > 0) {
     try {
-      await dbUpsertPostes(postesAMettreAJour);
+      await dbUpsertPostes([...new Map(postesAMettreAJour.map(p => [p.id, p])).values()]);
     } catch (err) {
       console.error("Erreur de synchronisation automatique :", err);
     }
   }
 }
-
