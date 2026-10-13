@@ -16,6 +16,8 @@ function formatTelWA(tel) {
 
 // Ouvre WhatsApp Web / app avec le message pré-rempli
 function sendWhatsApp(tel, message) {
+  const contacts = STATE.enfants.filter(e => telephoneConsentementWhatsApp(e.tel) === telephoneConsentementWhatsApp(tel));
+  if (!contacts.some(consentementWhatsAppValide)) { showToast("Aucun consentement WhatsApp valide pour ce contact.", "error"); return; }
   const numero = formatTelWA(tel);
   if (!numero) {
     showToast("Aucun numéro WhatsApp enregistré pour ce parent.", "error");
@@ -478,8 +480,7 @@ function renderWhatsAppTab() {
       if (!enfant) return;
       const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
       const suiviEnfant = STATE.suivi.filter(s => s.enfant_id === enfant.id);
-      const msg = buildBilanMessage(enfant, postesEnfant, suiviEnfant);
-      sendWhatsApp(enfant.tel, msg);
+      ouvrirModeleParent(enfant, "bilan_financier");
     });
   });
 }
@@ -569,34 +570,115 @@ function renderMessagerieTab() {
     btn.addEventListener("click", () => {
       const enfant = STATE.enfants.find(e => e.id === btn.dataset.waMsg);
       const texte = composerMessageMessagerie();
-      if (!texte) {
+      if (!texte && !BDJ_MODELE_PAR_FILTRE[document.getElementById("msgFiltrePreset")?.value]) {
         showToast("Écrivez un message avant de l'envoyer.", "error");
         return;
       }
-      sendWhatsApp(enfant.tel, texte);
+      openWhatsAppApiModal({ liste: [enfant], type: BDJ_MODELE_PAR_FILTRE[document.getElementById("msgFiltrePreset")?.value], contextes: {} });
     });
   });
 }
 
-// Envoi groupé : ouvre un onglet WhatsApp par destinataire filtré et
-// disposant d'un numéro. Les navigateurs autorisent plusieurs fenêtres
-// ouvertes depuis un seul clic — au-delà, ils peuvent bloquer les
-// suivantes (autoriser les popups pour ce site si besoin).
+// Un lien wa.me prépare une conversation, il n'envoie pas le message.
+// Un clic distinct par parent évite le blocage des fenêtres suivantes.
+var fileEnvoiGroupe = restaurerFileWhatsApp();
+
+function restaurerFileWhatsApp() {
+  try {
+    const file = JSON.parse(window.sessionStorage.getItem("bdj_file_whatsapp_v1"));
+    if (typeof file?.texte !== "string" || !Array.isArray(file.destinataires) || !file.destinataires.every(d =>
+      /^\d{8,15}$/.test(d.numero) && typeof d.parent === "string" && Array.isArray(d.enfants) &&
+      d.enfants.every(n => typeof n === "string") && ["a_traiter", "ouvert", "confirme", "ignore"].includes(d.etat))) return null;
+    return file;
+  } catch (_) { return null; }
+}
+
+function sauvegarderFileWhatsApp() {
+  try {
+    if (fileEnvoiGroupe) window.sessionStorage.setItem("bdj_file_whatsapp_v1", JSON.stringify(fileEnvoiGroupe));
+    else window.sessionStorage.removeItem("bdj_file_whatsapp_v1");
+  } catch (_) { /* La file reste utilisable en mémoire si le stockage est désactivé. */ }
+}
+
+function preparerFileWhatsApp(liste, texte) {
+  const parNumero = new Map();
+  let sansNumero = 0;
+  liste.forEach(e => {
+    const numero = formatTelWA(e.tel);
+    if (!numero || !/^\d{8,15}$/.test(numero)) { sansNumero++; return; }
+    if (!parNumero.has(numero)) parNumero.set(numero, { numero, parent: e.parent || "Parent", enfants: [], etat: "a_traiter" });
+    parNumero.get(numero).enfants.push(e.nom);
+  });
+  return { texte, destinataires: [...parNumero.values()], sansNumero };
+}
+
+function ouvrirDestinataireGroupe(index) {
+  const d = fileEnvoiGroupe?.destinataires[index];
+  if (!d || ["confirme", "ignore"].includes(d.etat)) return false;
+  if (!STATE.enfants.some(e => telephoneConsentementWhatsApp(e.tel) === telephoneConsentementWhatsApp(d.numero) && consentementWhatsAppValide(e))) { showToast("Le consentement de ce contact n'est plus valide.", "error"); return false; }
+  const fenetre = window.open(`https://wa.me/${d.numero}?text=${encodeURIComponent(fileEnvoiGroupe.texte)}`, "bulles_whatsapp");
+  if (!fenetre) { showToast("Le navigateur a bloqué WhatsApp. Autorisez l'ouverture puis réessayez ce destinataire.", "error"); return false; }
+  try { fenetre.opener = null; } catch (_) { /* Certains navigateurs protègent cette propriété. */ }
+  d.etat = "ouvert";
+  sauvegarderFileWhatsApp();
+  return true;
+}
+
+function confirmerDestinataireGroupe(index) {
+  const d = fileEnvoiGroupe?.destinataires[index];
+  if (!d || d.etat !== "ouvert") return false;
+  d.etat = "confirme";
+  sauvegarderFileWhatsApp();
+  return true;
+}
+
+function renderFileWhatsApp() {
+  const file = fileEnvoiGroupe;
+  if (!file) return;
+  const confirmes = file.destinataires.filter(d => d.etat === "confirme").length;
+  const ignores = file.destinataires.filter(d => d.etat === "ignore").length;
+  const index = file.destinataires.findIndex(d => ["a_traiter", "ouvert"].includes(d.etat));
+  const courant = file.destinataires[index];
+  const libelles = { a_traiter: "À traiter", ouvert: "Conversation ouverte", confirme: "Envoi confirmé par vous", ignore: "Ignoré" };
+  openModal(`
+    <div class="modal-title">Message à la liste filtrée</div>
+    <p class="modal-text">${file.destinataires.length} numéro(s) distinct(s) · ${confirmes} envoi(s) confirmé(s) · ${ignores} ignoré(s).${file.sansNumero ? ` ${file.sansNumero} dossier(s) sans numéro valide.` : ""}</p>
+    <p class="modal-text">Ouvrez WhatsApp, validez l'envoi dans WhatsApp, puis revenez ici et confirmez pour passer au parent suivant. La liste est conservée jusqu'à la fin, même si les filtres changent. Un même numéro reçoit un seul message.</p>
+    <details><summary>Voir le message</summary><p style="white-space:pre-wrap">${escapeHtml(file.texte)}</p></details>
+    ${courant ? `<p><strong>${escapeHtml(courant.parent)}</strong> — ${escapeHtml(courant.enfants.join(", "))}<br>+${escapeHtml(courant.numero)}</p>
+      <div class="modal-actions"><button class="btn btn-whatsapp" id="waGroupeOuvrir">${courant.etat === "ouvert" ? "Rouvrir" : "Ouvrir"} WhatsApp</button><button class="btn btn-primary" id="waGroupeConfirmer" ${courant.etat !== "ouvert" ? "disabled" : ""}>J'ai envoyé ce message</button><button class="btn btn-ghost" id="waGroupeIgnorer">Ignorer ce parent</button></div>` : `<p class="text-green">Liste traitée : ${confirmes} envoi(s) confirmé(s) par vous.${ignores ? ` ${ignores} destinataire(s) ignoré(s).` : ""}</p>`}
+    <details><summary>Destinataires (${file.destinataires.length})</summary><div style="max-height:25vh;overflow:auto">${file.destinataires.map(d => `<p>${escapeHtml(d.enfants.join(", "))} — ${escapeHtml(libelles[d.etat])}</p>`).join("")}</div></details>
+    <div class="modal-actions"><button class="btn btn-ghost" id="waGroupeFermer">${courant ? "Fermer et reprendre plus tard" : "Fermer"}</button><button class="btn btn-secondary" id="waGroupeNouvelle">Nouvelle liste avec les filtres actuels</button></div>
+  `);
+  document.getElementById("waGroupeFermer").addEventListener("click", closeModal);
+  document.getElementById("waGroupeNouvelle").addEventListener("click", () => {
+    const texte = composerMessageMessagerie();
+    const nouvelle = preparerFileWhatsApp(enfantsFiltresMessagerie(), texte);
+    if (!texte || !nouvelle.destinataires.length) { showToast("Écrivez un message et sélectionnez des parents avec un numéro valide. La file en cours est conservée.", "error"); return; }
+    fileEnvoiGroupe = nouvelle; sauvegarderFileWhatsApp(); renderFileWhatsApp();
+  });
+  document.getElementById("waGroupeOuvrir")?.addEventListener("click", () => { if (ouvrirDestinataireGroupe(index)) renderFileWhatsApp(); });
+  document.getElementById("waGroupeConfirmer")?.addEventListener("click", () => { if (confirmerDestinataireGroupe(index)) renderFileWhatsApp(); });
+  document.getElementById("waGroupeIgnorer")?.addEventListener("click", () => { courant.etat = "ignore"; sauvegarderFileWhatsApp(); renderFileWhatsApp(); });
+}
+
 function handleEnvoiGroupe() {
+  if (fileEnvoiGroupe?.destinataires.some(d => ["a_traiter", "ouvert"].includes(d.etat))) { renderFileWhatsApp(); return; }
   const texte = composerMessageMessagerie();
   if (!texte) {
     showToast("Écrivez un message avant de l'envoyer.", "error");
     return;
   }
 
-  const destinataires = enfantsFiltresMessagerie().filter(e => formatTelWA(e.tel));
-  if (destinataires.length === 0) {
+  const file = preparerFileWhatsApp(enfantsFiltresMessagerie().filter(consentementWhatsAppValide), texte);
+  if (file.destinataires.length === 0) {
     showToast("Aucun destinataire avec un numéro WhatsApp dans cette sélection.", "error");
     return;
   }
 
-  destinataires.forEach(e => sendWhatsApp(e.tel, texte));
-  showToast(`Envoi lancé pour ${destinataires.length} destinataire(s). Autorisez les fenêtres pop-up si votre navigateur les bloque.`, "success");
+  fileEnvoiGroupe = file;
+  sauvegarderFileWhatsApp();
+  renderFileWhatsApp();
 }
 
 // ---------- Initialisation des écouteurs (appelée une fois au démarrage) ----------
@@ -606,4 +688,5 @@ function initWhatsapp() {
   document.getElementById("msgFiltreSect")?.addEventListener("change", renderMessagerieTab);
   document.getElementById("msgFiltrePreset")?.addEventListener("change", renderMessagerieTab);
   document.getElementById("btnEnvoiGroupe")?.addEventListener("click", handleEnvoiGroupe);
+  document.getElementById("btnEnvoiGroupeApi")?.addEventListener("click", () => openWhatsAppApiModal({ liste: enfantsFiltresMessagerie(), type: BDJ_MODELE_PAR_FILTRE[document.getElementById("msgFiltrePreset")?.value], contextes: {} }));
 }

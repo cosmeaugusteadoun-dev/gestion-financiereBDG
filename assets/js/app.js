@@ -7,7 +7,7 @@
 function sessionValide() {
   try {
     const session = JSON.parse(sessionStorage.getItem("bdj_session"));
-    return !!session && session.actif === true && session.expire > Date.now();
+    return !!session && ["supabase", "historique"].includes(session.mode) && session.actif === true && session.expire > Date.now();
   } catch {
     return false;
   }
@@ -18,6 +18,18 @@ if (!sessionValide()) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  if (!sessionValide()) return;
+  try {
+    const session = JSON.parse(sessionStorage.getItem("bdj_session"));
+    if (!await verifierSessionSupabase(session)) {
+      await deconnecter();
+      return;
+    }
+  } catch (err) {
+    console.error("Vérification de session impossible :", err);
+    await deconnecter();
+    return;
+  }
   wireLogout();
   wireBurgerMenu();
   wireChangerMotDePasse();
@@ -51,9 +63,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 // ============================================================
 // DÉCONNEXION
 // ============================================================
-function deconnecter() {
+async function deconnecter() {
   sessionStorage.removeItem("bdj_session");
-  window.location.href = "index.html";
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } finally {
+    // Effacer les jetons de cet onglet même si le réseau est indisponible.
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const cle = sessionStorage.key(i);
+      if (cle?.startsWith("sb-") && cle.includes("-auth-token")) sessionStorage.removeItem(cle);
+    }
+    window.location.href = "index.html";
+  }
 }
 function wireLogout() {
   document.getElementById("btnLogout").addEventListener("click", deconnecter);
@@ -160,18 +181,14 @@ function openChangerMotDePasseModal() {
     btn.textContent = "Vérification…";
 
     try {
-      const hashActuel = await dbRecupererHashMotDePasse();
-      const hashAncienSaisi = await sha256HexApp(ancien);
-
-      if (hashAncienSaisi !== hashActuel) {
-        afficherErreurMdp("L'ancien mot de passe saisi est incorrect.");
-        btn.disabled = false;
-        btn.innerHTML = `<i class="bi bi-check-lg"></i> Enregistrer`;
-        return;
+      const session = JSON.parse(sessionStorage.getItem("bdj_session"));
+      if (session?.mode === "historique") {
+        if (await sha256HexApp(ancien) !== await recupererHashHistorique()) throw new Error("L'ancien mot de passe saisi est incorrect.");
+        const { error } = await supabase.from("app_config").upsert({ id: "main", password_hash: await sha256HexApp(nouveau), updated_at: new Date().toISOString() }, { onConflict: "id" });
+        if (error) throw error;
+      } else {
+        await changerMotDePasseSupabase(session, ancien, nouveau);
       }
-
-      const hashNouveau = await sha256HexApp(nouveau);
-      await dbChangerMotDePasse(hashNouveau);
       closeModal();
       showToast("Mot de passe changé avec succès. Utilisez le nouveau mot de passe à la prochaine connexion.", "success");
     } catch (err) {

@@ -185,6 +185,10 @@
             <label>Téléphone du parent (WhatsApp)</label>
             <input type="tel" id="fTel" placeholder="Ex. 97 12 34 56">
           </div>
+          <div class="field" style="grid-column:1 / -1">
+            <label class="checkbox-item"><input type="checkbox" id="fConsentWhatsApp"> Le parent a consenti à recevoir les notifications WhatsApp</label>
+            <div class="field-hint">Aucun consentement enregistré. La date sera enregistrée automatiquement à la validation du dossier.</div>
+          </div>
           <div class="field">
             <label>Date de naissance</label>
             <input type="date" id="fDdn">
@@ -314,7 +318,7 @@
           <div class="field">
             <label>Mois concerné</label>
             <select id="eMois">
-              <option value="">— Automatique —</option>
+              <option value="">— Automatique (mois du paiement) —</option>
               <option>Sep</option><option>Oct</option><option>Nov</option><option>Déc</option>
               <option>Jan</option><option>Fév</option><option>Mar</option><option>Avr</option>
               <option>Mai</option><option>Jun</option><option>Jul</option><option>Aoû</option>
@@ -324,6 +328,7 @@
                 <option value="t3">3ème tranche</option>
               </optgroup>
             </select>
+            <div class="field-hint">Pour les services mensuels, le mode automatique cible le mois de la date de paiement. Choisissez un autre mois pour un règlement antérieur ou anticipé.</div>
           </div>
           <div class="field">
             <label>Note</label>
@@ -605,7 +610,8 @@
           </select>
         </div>
         <div class="form-actions mb-2">
-          <button type="button" class="btn btn-whatsapp" id="btnEnvoiGroupe"><i class="bi bi-whatsapp"></i> Envoyer via WhatsApp (envoi groupé)</button>
+          <button type="button" class="btn btn-whatsapp" id="btnEnvoiGroupe"><i class="bi bi-whatsapp"></i> Message à toute la liste filtrée</button>
+          <button type="button" class="btn btn-primary" id="btnEnvoiGroupeApi"><i class="bi bi-send"></i> Envoi automatique (API)</button>
         </div>
         <div class="msg-list" id="msgList"></div>
       </div>
@@ -638,18 +644,21 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=36"></script>
-<script src="assets/js/db.js?v=36"></script>
-<script src="assets/js/postes.js?v=36"></script>
-<script src="assets/js/whatsapp.js?v=36"></script>
-<script src="assets/js/enfants.js?v=36"></script>
-<script src="assets/js/entrees.js?v=36"></script>
-<script src="assets/js/sorties.js?v=36"></script>
-<script src="assets/js/dashboard.js?v=36"></script>
-<script src="assets/js/bilans.js?v=36"></script>
-<script src="assets/js/notes.js?v=36"></script>
-<script src="assets/js/app.js?v=36"></script>
-<script src="assets/js/pwa-install.js?v=36"></script>
+<script src="assets/js/config.js?v=44"></script>
+<script src="assets/js/auth.js?v=44"></script>
+<script src="assets/js/db.js?v=41"></script>
+<script src="assets/js/postes.js?v=41"></script>
+<script src="assets/js/whatsapp.js?v=41"></script>
+<script src="assets/js/whatsapp-modeles.js?v=41"></script>
+<script src="assets/js/whatsapp-api.js?v=41"></script>
+<script src="assets/js/enfants.js?v=41"></script>
+<script src="assets/js/entrees.js?v=41"></script>
+<script src="assets/js/sorties.js?v=41"></script>
+<script src="assets/js/dashboard.js?v=41"></script>
+<script src="assets/js/bilans.js?v=41"></script>
+<script src="assets/js/notes.js?v=41"></script>
+<script src="assets/js/app.js?v=44"></script>
+<script src="assets/js/pwa-install.js?v=41"></script>
 <script>
   // Enregistrement du service worker (installation PWA + usage hors-ligne)
   if ("serviceWorker" in navigator) {

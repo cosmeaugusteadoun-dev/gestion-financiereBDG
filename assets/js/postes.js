@@ -216,7 +216,26 @@ function buildPostes(sect, stat, opt) {
   // séparé ne se reflétait ni sur le détail par mois/tranche, ni sur les
   // bilans par secteur, ni sur le message WhatsApp envoyé aux parents.
 
+  appliquerMoisNonSouscrits(p, opt);
   return p;
+}
+
+// La participation est conservée dans opt (JSON), sans nouvelle colonne SQL.
+function posteEstAbsent(poste, opt) {
+  if (!poste || !poste.mois) return false;
+  if (!opt && typeof STATE !== "undefined") opt = STATE.enfants.find(e => e.id === poste.enfant_id)?.opt;
+  return !!opt?.mois_non_souscrits?.[poste.key]?.absent;
+}
+
+function appliquerMoisNonSouscrits(postes, opt) {
+  postes.forEach(p => {
+    const participation = p.mois && opt?.mois_non_souscrits?.[p.key];
+    if (!participation) return;
+    if (participation.absent) { if (!(p.paye > 0)) p.du = 0; }
+    else if (Number.isSafeInteger(participation.du) && participation.du >= 0 &&
+      (participation.du > 0 || participation.tarif_manuel || !(p.paye > 0))) p.du = participation.du;
+  });
+  return postes;
 }
 
 function ajouterRepasReduits(postes, opt) {
@@ -280,7 +299,7 @@ function imputerPaiement(postes, cat, montant, moisDepart, postesCibles) {
   // lors d'un versement mensuel de Crèche (elles ont leurs propres secteurs)
   const base = postesCibles || postes.filter(p => p.cat === cat);
   const cibles = base
-    .filter(p => p.cat === cat && !p.is_var && !p.is_remise && p.key !== "avance" && (cat !== "Crèche" || (p.key !== "inscr" && p.key !== "assur")))
+    .filter(p => p.cat === cat && !posteEstAbsent(p) && !p.is_var && !p.is_remise && p.key !== "avance" && (cat !== "Crèche" || (p.key !== "inscr" && p.key !== "assur")))
     .sort((a, b) => {
       if (cat === "Scolarité") {
         const SCOL_ORD = ["inscr", "t1", "t2", "t3"];
@@ -486,7 +505,7 @@ var SEUIL_RETARD_T2 = new Date(2026, 11, 8);                // 08/12/2026
 var SEUIL_RETARD_T3 = new Date(2027, 1, 10);                 // 10/02/2027
 
 function posteEnRetard(p) {
-  if (!p || p.is_var || p.is_remise) return false;
+  if (!p || p.is_var || p.is_remise || posteEstAbsent(p)) return false;
   if ((p.paye || 0) >= p.du) return false;
 
   const today = new Date();

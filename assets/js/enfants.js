@@ -137,6 +137,7 @@ async function handleCreateEnfant(e) {
     showToast("Veuillez renseigner au minimum le nom et la section.", "error");
     return;
   }
+  if (document.getElementById("fConsentWhatsApp")?.checked && !telephoneConsentementWhatsApp(tel)) { showToast("Renseignez un numéro WhatsApp valide avant de valider le consentement.", "error"); return; }
 
   // Uniforme : montant libre à saisir manuellement (sauf Crèche)
   const montantUnif = (sect !== "creche") ? (parseFloat(document.getElementById("fMontantUnif")?.value) || 0) : 0;
@@ -156,6 +157,7 @@ async function handleCreateEnfant(e) {
   };
 
   const id = uid("enf");
+  opt.whatsapp_consent = preparerConsentementWhatsApp(null, !!document.getElementById("fConsentWhatsApp")?.checked, tel, parent);
   const enfant = { id, nom, sect, stat, sexe, tel, parent, civilite, ddn, date_inscription: dateInscription, annee, opt, remise, remise_cible: remiseCible };
   const postesGeneres = fabriquerPostesEnfant(id, sect, stat, opt);
 
@@ -239,6 +241,7 @@ function reconcilerPostes(enfant, newOpt) {
   // Applique la nouvelle remise directement sur les postes réels, comme un
   // paiement classique, et mémorise les allocations dans newOpt pour
   // pouvoir l'annuler proprement la prochaine fois que le dossier change.
+  appliquerMoisNonSouscrits(resultat, newOpt);
   const allocationsRemise = appliquerRemise(resultat, newOpt.remiseCible, newOpt.remise);
   newOpt.remise_allocations = allocationsRemise.map(a => ({ poste_id: a.poste.id, montant: a.montant }));
 
@@ -323,15 +326,17 @@ function renderEnfantItem(e) {
   // posteIdEditable : pour les mois à effectif réduit (Cantine/Goûter/
   // Cantine crèche de mars, juin, septembre) dont le montant est saisi
   // manuellement — affiche une icône crayon pour le définir/l'ajuster.
-  function renderPosteRow(label, du, paye, isVar, retard, posteIdEditable, montantNonDefini) {
+  function renderPosteRow(label, du, paye, isVar, retard, posteIdEditable, montantNonDefini, absent) {
     const reste = isVar ? Math.max(-(paye || 0), 0) : Math.max((du || 0) - (paye || 0), 0);
-    const duTxt = isVar ? "Montant libre" : (montantNonDefini ? "À définir" : fmtFCFA(du));
+    const duTxt = absent ? "Non facturé" : isVar ? "Montant libre" : (montantNonDefini ? "À définir" : fmtFCFA(du));
 
     // Transparence totale : dès qu'un poste n'est pas soldé, on affiche à la
     // fois ce qui a déjà été versé (en bleu) et ce qu'il reste (en rouge/orange)
     // — jamais le reste seul, ni les deux dans la même couleur : ça se confond.
     let statutHtml;
-    if (isVar) {
+    if (absent) {
+      statutHtml = '<span class="text-muted">Absent / non souscrit</span>';
+    } else if (isVar) {
       statutHtml = `<span class="text-blue">${fmtFCFA(paye)} versé</span>`;
     } else if (montantNonDefini) {
       statutHtml = `<span class="text-muted">Montant non défini</span>`;
@@ -342,7 +347,7 @@ function renderEnfantItem(e) {
       statutHtml = `<span class="text-blue">Versé ${fmtFCFA(paye || 0)}</span> · <span class="${resteClass}">Restant ${fmtFCFA(reste)}</span>`;
     }
 
-    const editBtn = posteIdEditable
+    const editBtn = posteIdEditable && !absent
       ? `<button type="button" class="btn-icon-edit-poste" data-editer-montant="${posteIdEditable}" title="Définir le montant"><i class="bi bi-pencil-fill"></i></button>`
       : "";
 
@@ -413,10 +418,12 @@ function renderEnfantItem(e) {
           // du groupe (potentiellement mélangé à la Garderie, toujours à
           // tarif fixe) — on expose son id pour l'édition manuelle, et on
           // n'affiche "à définir" que si c'est le seul poste du mois.
-          const posteReduitObj = g.postes.find(p => p.is_reduit);
+          const posteReduitObj = g.postes.find(p => p.is_reduit && !posteEstAbsent(p));
           const posteReduit = posteReduitObj ? posteReduitObj.id : null;
           const montantNonDefini = g.postes.length === 1 && !!posteReduitObj && !posteReduitObj.du;
-          return renderPosteRow(`Cantine ${mois}`, g.du, g.paye, false, retard, posteReduit, montantNonDefini);
+          const absents = g.postes.filter(p => posteEstAbsent(p));
+          const detail = absents.length && absents.length < g.postes.length ? ` — non souscrit : ${absents.map(p => p.label).join(", ")}` : "";
+          return renderPosteRow(`Cantine ${mois}${detail}`, g.du, g.paye, false, retard, posteReduit, montantNonDefini, absents.length === g.postes.length);
         }).join("")
         + horsMois.map(p => renderPosteRow(p.label, p.du, p.paye, p.is_var, posteEnRetard(p))).join("");
     } else {
@@ -424,7 +431,7 @@ function renderEnfantItem(e) {
         // Le libellé « montant à définir » n'a plus lieu d'être une fois le
         // montant saisi au crayon — ou fixé par un versement ciblé sur ce mois.
         const label = (p.is_reduit && p.du > 0) ? p.label.replace(" — montant à définir", "") : p.label;
-        return renderPosteRow(label, p.du, p.paye, p.is_var, posteEnRetard(p), p.is_reduit ? p.id : null, p.is_reduit && !p.du);
+        return renderPosteRow(label, p.du, p.paye, p.is_var, posteEnRetard(p), p.is_reduit ? p.id : null, p.is_reduit && !p.du, posteEstAbsent(p));
       }).join("");
     }
 
@@ -438,8 +445,8 @@ function renderEnfantItem(e) {
     .map(en => `
       <div class="timeline-item">
         <span class="timeline-date">${formatDateFR(en.date)}</span>
-        <span>${escapeHtml(en.sect || "—")}${en.mois ? " · " + en.mois : ""}</span>
-        <span class="timeline-mt">${fmtFCFA(en.mt)}</span>
+        <span>${escapeHtml(en.sect || "—")}${en.mois ? " · " + escapeHtml(en.mois) : ""}</span>
+        <span class="timeline-mt">${fmtFCFA(en.mt)}${entreeRepartitionCorrigeable(en) ? `<button type="button" class="btn btn-ghost btn-sm" data-corriger-repartition="${escapeHtml(en.id)}">Vérifier la répartition</button>` : ""}</span>
       </div>`).join("");
 
   return `
@@ -449,7 +456,8 @@ function renderEnfantItem(e) {
           <div class="enfant-avatar">${initials(e.nom)}</div>
           <div>
             <div class="enfant-name">${escapeHtml(e.nom)}</div>
-            <div class="enfant-meta">${SECT_LABELS[e.sect] || e.sect} · ${e.stat === "nouveau" ? "Nouveau" : "Ancien"}${e.tel ? " · " + escapeHtml(e.tel) : ""}</div>
+            <div class="enfant-meta">${escapeHtml(SECT_LABELS[e.sect] || e.sect)} · ${e.stat === "nouveau" ? "Nouveau" : "Ancien"}${e.tel ? " · " + escapeHtml(e.tel) : ""}</div>
+            <div class="enfant-meta">WhatsApp : ${consentementWhatsAppValide(e) ? `accord enregistré le ${formatDateFR(e.opt.whatsapp_consent.recorded_at)}` : "aucun consentement valide enregistré"}</div>
           </div>
         </div>
         <div class="enfant-right">
@@ -475,6 +483,7 @@ function renderEnfantItem(e) {
         </div>
 
         <div class="enfant-actions">
+          <button class="btn btn-secondary btn-sm" data-mois-services="${e.id}"><i class="bi bi-calendar-check"></i> Présence / mois</button>
           <button class="btn btn-secondary btn-sm" data-opt="${e.id}"><i class="bi bi-sliders"></i> Modifier les options</button>
           <button class="btn btn-secondary btn-sm" data-profil="${e.id}"><i class="bi bi-pencil-square"></i> Modifier le profil</button>
           <button class="btn btn-whatsapp btn-sm" data-wa="${e.id}" ${e.tel ? "" : "disabled"}><i class="bi bi-whatsapp"></i> Envoyer bilan WhatsApp</button>
@@ -483,6 +492,77 @@ function renderEnfantItem(e) {
         </div>
       </div>
     </div>`;
+}
+
+function preparerMoisNonSouscrits(enfant, choix) {
+  const opt = JSON.parse(JSON.stringify(enfant.opt || {}));
+  opt.mois_non_souscrits = { ...(opt.mois_non_souscrits || {}) };
+  const postes = STATE.postes.filter(p => p.enfant_id === enfant.id).map(p => ({ ...p }));
+  postes.forEach(p => {
+    if (!p.mois || !Object.prototype.hasOwnProperty.call(choix, p.key)) return;
+    const ancien = opt.mois_non_souscrits[p.key];
+    if (choix[p.key]) {
+      if (p.paye > 0) throw new Error(`${p.label} : un versement ou une remise existe déjà. Corrigez ce versement avant de marquer le mois absent.`);
+      opt.mois_non_souscrits[p.key] = { absent: true, du: ancien?.absent ? ancien.du : (Number(p.du) || 0) };
+      p.du = 0;
+    } else if (ancien?.absent) {
+      p.du = Number(ancien.du) || 0;
+      // Garder le tarif réactivé permet de le restaurer même si l'écriture
+      // des postes échoue après celle des options.
+      opt.mois_non_souscrits[p.key] = { absent: false, du: p.du };
+    }
+  });
+  return { opt, postes };
+}
+
+async function enregistrerMoisNonSouscrits(enfant, choix) {
+  if (correctionEntreeEnCours || correctionMensuelleEnAttente(enfant.id)) throw new Error("Terminez la synchronisation de la répartition avant de modifier ces mois. Rechargez la page.");
+  const resultat = preparerMoisNonSouscrits(enfant, choix);
+  // Les options sont la source durable de la participation et de son tarif.
+  // La synchronisation au chargement répare une écriture des postes interrompue.
+  await dbUpdateEnfant(enfant.id, { opt: resultat.opt });
+  enfant.opt = resultat.opt;
+  STATE.postes = STATE.postes.filter(p => p.enfant_id !== enfant.id).concat(resultat.postes);
+  try {
+    await dbUpsertPostes(resultat.postes);
+  } catch (err) {
+    throw new Error(`Participation enregistrée ; synchronisation des montants incomplète : ${err.message}. Rechargez la page, sans ressaisir les paiements.`);
+  }
+}
+
+function openMoisServicesModal(enfantId) {
+  const enfant = STATE.enfants.find(e => e.id === enfantId);
+  if (!enfant) return;
+  const postes = STATE.postes.filter(p => p.enfant_id === enfantId && p.mois && !p.is_var && !p.is_remise);
+  if (!postes.length) { showToast("Aucun service mensuel dans ce dossier.", "error"); return; }
+  const ordre = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
+  postes.sort((a, b) => ordre.indexOf(a.mois) - ordre.indexOf(b.mois) || a.label.localeCompare(b.label));
+  openModal(`
+    <div class="modal-title">Présence / mois — ${escapeHtml(enfant.nom)}</div>
+    <p class="modal-text">Choisissez « Absent / non souscrit » pour les services inutilisés. Ces mois ne sont pas facturés et ne génèrent aucun retard. Vous pourrez les réactiver. Un mois déjà crédité conserve son paiement.</p>
+    <div style="max-height:55vh;overflow:auto">${postes.map(p => `
+      <div class="field">
+        <label for="presence-${escapeHtml(p.id)}">${escapeHtml(p.label.replace(/Garderie midi/g, "Garderie"))}</label>
+        <select id="presence-${escapeHtml(p.id)}" data-presence-key="${escapeHtml(p.key)}" ${p.paye > 0 ? "disabled" : ""}>
+          <option value="actif" ${!posteEstAbsent(p) ? "selected" : ""}>Souscrit${p.paye > 0 ? " — paiement enregistré" : ""}</option>
+          <option value="absent" ${posteEstAbsent(p) ? "selected" : ""}>Absent / non souscrit</option>
+        </select>
+      </div>`).join("")}</div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="presenceAnnuler">Annuler</button><button class="btn btn-primary" id="presenceEnregistrer">Enregistrer</button></div>
+  `);
+  document.getElementById("presenceAnnuler").addEventListener("click", closeModal);
+  document.getElementById("presenceEnregistrer").addEventListener("click", async ev => {
+    const bouton = ev.currentTarget;
+    if (bouton.disabled) return;
+    const choix = {};
+    document.querySelectorAll("[data-presence-key]").forEach(el => { choix[el.dataset.presenceKey] = el.value === "absent"; });
+    bouton.disabled = true;
+    try {
+      await enregistrerMoisNonSouscrits(enfant, choix);
+      closeModal(); refreshAllTabs();
+      showToast("Participation mensuelle enregistrée.", "success");
+    } catch (err) { bouton.disabled = false; showToast(err.message, "error"); }
+  });
 }
 
 function wireEnfantItemEvents() {
@@ -505,6 +585,8 @@ function wireEnfantItemEvents() {
   });
 
   document.querySelectorAll("[data-opt]").forEach(btn => btn.addEventListener("click", () => openEditOptionsModal(btn.dataset.opt)));
+  document.querySelectorAll("[data-mois-services]").forEach(btn => btn.addEventListener("click", () => openMoisServicesModal(btn.dataset.moisServices)));
+  document.querySelectorAll("[data-corriger-repartition]").forEach(btn => btn.addEventListener("click", () => openCorrectionMensuelleModal(btn.dataset.corrigerRepartition)));
   document.querySelectorAll("[data-profil]").forEach(btn => btn.addEventListener("click", () => openEditProfilModal(btn.dataset.profil)));
   document.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", (ev) => {
     ev.stopPropagation(); // évite de (dé)plier le dossier quand on clique la poubelle de l'en-tête
@@ -514,9 +596,7 @@ function wireEnfantItemEvents() {
   document.querySelectorAll("[data-wa]").forEach(btn => btn.addEventListener("click", () => {
     const enfant = STATE.enfants.find(e => e.id === btn.dataset.wa);
     if (!enfant) return;
-    const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
-    const suiviEnfant = STATE.suivi.filter(s => s.enfant_id === enfant.id);
-    sendWhatsApp(enfant.tel, buildBilanMessage(enfant, postesEnfant, suiviEnfant));
+    ouvrirModeleParent(enfant, "bilan_financier");
   }));
   document.querySelectorAll("[data-editer-montant]").forEach(btn => btn.addEventListener("click", (ev) => {
     ev.stopPropagation();
@@ -530,7 +610,8 @@ function wireEnfantItemEvents() {
 // ============================================================
 function openEditerMontantReduitModal(posteId) {
   const poste = STATE.postes.find(p => p.id === posteId);
-  if (!poste) return;
+  if (!poste || posteEstAbsent(poste)) return;
+  if (correctionEntreeEnCours || correctionMensuelleEnAttente(poste.enfant_id)) { showToast("Rechargez la page pour terminer la correction avant de modifier ce montant.", "error"); return; }
 
   openModal(`
     <div class="modal-title">Définir le montant — ${escapeHtml(poste.label)}</div>
@@ -546,19 +627,33 @@ function openEditerMontantReduitModal(posteId) {
   `);
 
   document.getElementById("modalAnnuler").addEventListener("click", closeModal);
-  document.getElementById("modalEnregistrer").addEventListener("click", async () => {
+  document.getElementById("modalEnregistrer").addEventListener("click", async ev => {
+    const bouton = ev.currentTarget;
+    if (bouton.disabled) return;
     const montant = parseFloat(document.getElementById("editMontantReduit").value) || 0;
+    if (!Number.isSafeInteger(montant) || montant < 0) { showToast("Saisissez un montant entier positif ou nul.", "error"); return; }
     const ancienDu = poste.du;
-    poste.du = montant;
+    const enfant = STATE.enfants.find(e => e.id === poste.enfant_id);
+    let tarifEnregistre = false;
+    bouton.disabled = true;
     try {
+      if (enfant?.opt?.mois_non_souscrits?.[poste.key]) {
+        const opt = JSON.parse(JSON.stringify(enfant.opt));
+        opt.mois_non_souscrits[poste.key] = { absent: false, du: montant, tarif_manuel: true };
+        await dbUpdateEnfant(enfant.id, { opt });
+        enfant.opt = opt;
+        tarifEnregistre = true;
+      }
+      poste.du = montant;
       await dbUpsertPostes([poste]);
       closeModal();
       refreshAllTabs();
       showToast("Montant mis à jour.", "success");
     } catch (err) {
-      poste.du = ancienDu;
+      if (!tarifEnregistre) poste.du = ancienDu;
+      bouton.disabled = false;
       console.error(err);
-      showToast("Erreur lors de la mise à jour : " + err.message, "error");
+      showToast((tarifEnregistre ? "Tarif enregistré, rechargez la page pour terminer la synchronisation : " : "Erreur lors de la mise à jour : ") + err.message, "error");
     }
   });
 }
@@ -567,6 +662,7 @@ function openEditerMontantReduitModal(posteId) {
 // MODAL — MODIFIER LES OPTIONS (services souscrits)
 // ============================================================
 function openEditOptionsModal(enfantId) {
+  if (correctionEntreeEnCours || correctionMensuelleEnAttente(enfantId)) { showToast("Rechargez la page pour terminer la correction avant de modifier les options.", "error"); return; }
   const enfant = STATE.enfants.find(e => e.id === enfantId);
   if (!enfant) return;
   const opt = enfant.opt || {};
@@ -714,6 +810,7 @@ function openEditProfilModal(enfantId, champCible) {
       </div>
       <div class="field"><label>Nom du parent</label><input type="text" id="editParent" value="${escapeHtml(enfant.parent||"")}"></div>
       <div class="field"><label>Téléphone (WhatsApp)</label><input type="tel" id="editTel" value="${escapeHtml(enfant.tel||"")}"></div>
+      <div class="field" style="grid-column:1 / -1"><label class="checkbox-item"><input type="checkbox" id="editConsentWhatsApp" ${consentementWhatsAppValide(enfant) ? "checked" : ""}> Le parent a consenti à recevoir les notifications WhatsApp</label><div class="field-hint" id="editConsentHint">${consentementWhatsAppValide(enfant) ? `Accord enregistré le ${formatDateFR(enfant.opt.whatsapp_consent.recorded_at)}.` : "Aucun consentement valide enregistré."} La date est enregistrée automatiquement à la validation de l'accord.</div></div>
       <div class="field"><label>Date de naissance</label><input type="date" id="editDdn" value="${enfant.ddn||""}"></div>
       <div class="field" ${enfant.sect !== "creche" ? 'style="display:none;"' : ""}><label>Date d'inscription <span class="text-muted">(Crèche uniquement)</span></label><input type="date" id="editDateInscription" value="${enfant.date_inscription||""}"></div>
     </div>
@@ -739,6 +836,10 @@ function openEditProfilModal(enfantId, champCible) {
   }
 
   document.getElementById("modalAnnuler").addEventListener("click", closeModal);
+  ["editTel", "editParent"].forEach(id => document.getElementById(id).addEventListener("input", () => {
+    document.getElementById("editConsentWhatsApp").checked = false;
+    document.getElementById("editConsentHint").textContent = "Coordonnées modifiées : validez de nouveau l'accord pour ce contact.";
+  }));
   document.getElementById("modalEnregistrer").addEventListener("click", async () => {
     const patch = {
       nom: document.getElementById("editNom").value.trim(),
@@ -752,6 +853,7 @@ function openEditProfilModal(enfantId, champCible) {
     if (!patch.nom) { showToast("Le nom ne peut pas être vide.", "error"); return; }
 
     try {
+      patch.opt = { ...(enfant.opt || {}), whatsapp_consent: preparerConsentementWhatsApp(enfant.opt?.whatsapp_consent, document.getElementById("editConsentWhatsApp").checked, patch.tel, patch.parent) };
       await dbUpdateEnfant(enfant.id, patch);
       Object.assign(enfant, patch);
       closeModal();
@@ -768,6 +870,7 @@ function openEditProfilModal(enfantId, champCible) {
 // SUPPRESSION D'UN DOSSIER
 // ============================================================
 function openDeleteEnfantModal(enfantId) {
+  if (correctionEntreeEnCours || correctionMensuelleEnAttente(enfantId)) { showToast("Rechargez la page pour terminer la correction avant de supprimer ce dossier.", "error"); return; }
   const enfant = STATE.enfants.find(e => e.id === enfantId);
   if (!enfant) return;
   const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
@@ -927,6 +1030,15 @@ async function synchroniserEtReparerDossiers() {
   const postesAMettreAJour = [];
 
   for (const enfant of STATE.enfants) {
+    if (correctionMensuelleEnAttente(enfant.id)) {
+      try {
+        for (const entree of STATE.entrees.filter(en => en.enfant_id === enfant.id)) await appliquerCorrectionMensuelle(entree);
+      } catch (err) {
+        console.error("Correction mensuelle en attente :", err);
+        showToast(`Répartition de ${enfant.nom} à synchroniser : ${err.message}`, "error");
+        continue;
+      }
+    }
     let postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
 
     // 1. Régénération des postes pour les dossiers vides (évite le faux statut "Soldé")
@@ -1006,6 +1118,14 @@ async function synchroniserEtReparerDossiers() {
       postesAMettreAJour.push(posteInscr);
       modifs = true;
     }
+  }
+
+  for (const enfant of STATE.enfants) {
+    STATE.postes.filter(p => p.enfant_id === enfant.id).forEach(p => {
+      const avant = p.du;
+      appliquerMoisNonSouscrits([p], enfant.opt || {});
+      if (p.du !== avant) { postesAMettreAJour.push(p); modifs = true; }
+    });
   }
 
   if (modifs && postesAMettreAJour.length > 0) {

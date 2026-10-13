@@ -6,7 +6,7 @@
 // à chaque changement de fichier pour éviter de servir une version périmée
 // (même piège de cache agressif déjà rencontré côté navigateur).
 // ============================================================
-var CACHE_NAME = "bulles-de-joie-v36";
+var CACHE_NAME = "bulles-de-joie-v45";
 
 var APP_SHELL = [
   "index.html",
@@ -14,9 +14,12 @@ var APP_SHELL = [
   "manifest.json",
   "assets/css/style.css",
   "assets/js/config.js",
+  "assets/js/auth.js",
   "assets/js/db.js",
   "assets/js/postes.js",
   "assets/js/whatsapp.js",
+  "assets/js/whatsapp-modeles.js",
+  "assets/js/whatsapp-api.js",
   "assets/js/enfants.js",
   "assets/js/entrees.js",
   "assets/js/sorties.js",
@@ -48,6 +51,10 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
+  // Les réponses de la base et de l'authentification ne doivent jamais
+  // être mises en cache ni remplacées par une ancienne réponse hors ligne.
+  const url = new URL(req.url);
+  if (url.hostname.endsWith(".supabase.co") || url.hostname.endsWith(".supabase.in")) return;
 
   event.respondWith(
     fetch(req)

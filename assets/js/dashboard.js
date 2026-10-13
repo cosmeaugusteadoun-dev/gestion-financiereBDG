@@ -88,6 +88,23 @@ function statutFiltreDashboard() {
 // ============================================================
 // ALERTES DE RETARD
 // ============================================================
+var listesDashboardOuvertes = { dashAlertes: false, dashSansDdn: false };
+var LIMITE_LISTES_DASHBOARD = 5;
+
+function listeDashboardVisible(id, liste) {
+  return listesDashboardOuvertes[id] ? liste : liste.slice(0, LIMITE_LISTES_DASHBOARD);
+}
+
+function ajouterBoutonListeDashboard(root, total, render) {
+  if (total <= LIMITE_LISTES_DASHBOARD) return;
+  const ouvert = !!listesDashboardOuvertes[root.id];
+  root.insertAdjacentHTML("beforeend", `<button type="button" class="btn btn-secondary btn-sm mt-1" data-liste-dashboard="${root.id}" aria-expanded="${ouvert}" aria-controls="${root.id}"><i class="bi ${ouvert ? "bi-chevron-up" : "bi-chevron-down"}"></i> ${ouvert ? "Voir moins" : `Voir plus (${total - LIMITE_LISTES_DASHBOARD} autres)`}</button>`);
+  root.querySelector("[data-liste-dashboard]").addEventListener("click", () => {
+    listesDashboardOuvertes[root.id] = !listesDashboardOuvertes[root.id];
+    render();
+  });
+}
+
 function renderAlertesRetard() {
   const root = document.getElementById("dashAlertes");
   if (!root) return;
@@ -116,7 +133,7 @@ function renderAlertesRetard() {
 
   const categoriesUniques = (detail) => [...new Set(detail.map(d => d.cat))].join(", ");
 
-  root.innerHTML = enfantsRetard.map(x => `
+  root.innerHTML = listeDashboardVisible(root.id, enfantsRetard).map(x => `
     <div class="alert alert-danger">
       <div style="flex:1;">
         <strong>${escapeHtml(x.enfant.nom)}</strong> — ${fmtFCFA(x.total)} en retard
@@ -128,6 +145,7 @@ function renderAlertesRetard() {
   root.querySelectorAll("[data-voir]").forEach(btn => {
     btn.addEventListener("click", () => verFicheEnfant(btn.dataset.voir));
   });
+  ajouterBoutonListeDashboard(root, enfantsRetard.length, renderAlertesRetard);
 }
 
 // ============================================================
@@ -221,7 +239,7 @@ function renderRenouvellementsCreche() {
     btn.addEventListener("click", () => {
       const enfant = STATE.enfants.find(e => e.id === btn.dataset.renouv);
       const dateRenouvellement = prochainRenouvellementCreche(enfant.date_inscription);
-      sendWhatsApp(enfant.tel, buildMessageRenouvellementCreche(enfant, dateRenouvellement));
+      ouvrirModeleParent(enfant, "renouvellement_creche", { dateRenouvellement });
     });
   });
 }
@@ -305,7 +323,7 @@ function renderSansDateNaissance() {
     return;
   }
 
-  root.innerHTML = manquants.map(e => `
+  root.innerHTML = listeDashboardVisible(root.id, manquants).map(e => `
     <div class="ddn-row">
       <div class="ddn-infos">
         <div class="bday-name">${escapeHtml(e.nom)}</div>
@@ -323,6 +341,7 @@ function renderSansDateNaissance() {
   root.querySelectorAll("[data-ddn-modifier]").forEach(btn => {
     btn.addEventListener("click", () => openEditProfilModal(btn.dataset.ddnModifier, "ddn"));
   });
+  ajouterBoutonListeDashboard(root, manquants.length, renderSansDateNaissance);
 }
 
 // ============================================================
@@ -368,7 +387,7 @@ function renderParentsARelancer() {
       const enfant = STATE.enfants.find(e => e.id === btn.dataset.relance);
       const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
       const suiviEnfant = STATE.suivi.filter(s => s.enfant_id === enfant.id);
-      sendWhatsApp(enfant.tel, buildBilanMessage(enfant, postesEnfant, suiviEnfant));
+      ouvrirModeleParent(enfant, "bilan_financier");
     });
   });
 

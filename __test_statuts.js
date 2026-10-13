@@ -21,6 +21,7 @@ vm.createContext(ctx);
 
 const base = __dirname + "/assets/js/";
 vm.runInContext(fs.readFileSync(base + "postes.js", "utf8"), ctx, { filename: "postes.js" });
+vm.runInContext(fs.readFileSync(base + "whatsapp-modeles.js", "utf8"), ctx, { filename: "whatsapp-modeles.js" });
 vm.runInContext(fs.readFileSync(base + "entrees.js", "utf8"), ctx, { filename: "entrees.js" });
 
 const run = code => vm.runInContext(code, ctx);

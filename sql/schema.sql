@@ -1,6 +1,9 @@
 -- ============================================================
 -- LES BULLES DE JOIE — Schéma base de données Supabase
 -- Usage : coller dans Supabase > SQL Editor > Run
+-- INITIALISATION UNIQUEMENT : ce script supprime les tables existantes.
+-- Après une initialisation neuve, appliquer obligatoirement la migration
+-- migration_2026-10-14_securite_acces.sql avant toute mise en service.
 -- ============================================================
 
 DROP TABLE IF EXISTS suivi CASCADE;

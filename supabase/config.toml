@@ -1,0 +1,6 @@
+project_id = "Gestion-financiere"
+
+# L'authentification est vérifiée dans le handler (JWT Supabase + liste admins).
+# Cela permet d'utiliser la clé publishable actuelle du projet.
+[functions.whatsapp-send]
+verify_jwt = false

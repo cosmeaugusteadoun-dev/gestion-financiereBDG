@@ -818,7 +818,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .modal-title { font-family: var(--font-heading); font-size: 17px; font-weight: 800; color: var(--navy); margin-bottom: 6px; }
 .modal-text { font-size: 13.5px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
-.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.modal-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 
 /* ============================================================
    MESSAGERIE (onglet Messagerie)
@@ -1090,8 +1090,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* ============================================================
    TABLEAU DE BORD — ordre des cartes sur mobile
-   Les anniversaires à venir passent AU-DESSUS des listes
-   « Sans date de naissance » et « Alertes de retard » (demande) :
+   Anniversaires, alertes de retard, puis sans date de naissance :
    le tableau de bord devient une colonne flexible et chaque carte
    reçoit un rang explicite, le DOM restant inchangé sur desktop.
    ============================================================ */
@@ -1101,10 +1100,13 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   #tab-dashboard > #dashMetrics   { order: 2; }
   #tab-dashboard > #dashCharts    { order: 3; }
   #tab-dashboard > #cardAnniversaires { order: 4; }
-  #tab-dashboard > .charts-grid   { order: 5; }
-  #tab-dashboard > #cardRelancer  { order: 6; }
-  #tab-dashboard > #cardRenouv    { order: 7; }
-  #tab-dashboard > #cardDerniers  { order: 8; }
+  #tab-dashboard > .charts-grid:not(#dashCharts) { display: contents; }
+  #tab-dashboard #cardAlertes { order: 5; }
+  #tab-dashboard #cardSansDdn { order: 6; }
+  #tab-dashboard #cardRecettes { order: 7; }
+  #tab-dashboard > #cardRelancer  { order: 8; }
+  #tab-dashboard > #cardRenouv    { order: 9; }
+  #tab-dashboard > #cardDerniers  { order: 10; }
 }
 
 /* ============================================================
@@ -1257,4 +1259,3 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   font-size: 11.5px;
   color: var(--muted);
 }
-

@@ -28,8 +28,8 @@
     <p class="login-subtitle">CSP Bilingue · Zongo 2, Parakou</p>
 
     <form id="loginForm" class="login-form" autocomplete="off">
-      <label for="identifiant" class="login-label">Identifiant</label>
-      <input type="text" id="identifiant" class="login-input" placeholder="Votre identifiant" autofocus required autocomplete="username">
+      <label for="identifiant" class="login-label">Identifiant ou email</label>
+      <input type="text" id="identifiant" class="login-input" placeholder="Votre identifiant ou votre email" autofocus required autocomplete="username">
 
       <label for="password" class="login-label mt-1">Mot de passe</label>
       <div class="password-wrap">
@@ -47,14 +47,14 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js?v=28"></script>
+  <script src="assets/js/config.js?v=44"></script>
+  <script src="assets/js/auth.js?v=44"></script>
   <script src="assets/js/pwa-install.js?v=28"></script>
   <script>
     // ============================================================
     // Authentification de l'écran de connexion
-    // Le mot de passe n'est jamais comparé en clair : il est haché
-    // (SHA-256) avant comparaison avec l'empreinte stockée dans config.js.
-    // Un verrouillage temporaire protège contre les essais répétés....
+    // Supabase Auth vérifie les identifiants sur le serveur.
+    // Le compteur local complète les limites de tentatives côté serveur.
     // ============================================================
     const DUREE_SESSION_MS = 12 * 60 * 60 * 1000; // 12 heures
     const MAX_TENTATIVES = 5;
@@ -88,7 +88,7 @@
         const brut = sessionStorage.getItem("bdj_session");
         if (!brut) return false;
         const session = JSON.parse(brut);
-        return session.actif === true && session.expire > Date.now();
+        return ["supabase", "historique"].includes(session.mode) && session.actif === true && session.expire > Date.now();
       } catch {
         return false;
       }
@@ -146,36 +146,14 @@
       // laisser le bouton bloqué sans retour visible pour l'utilisatrice.
       let redirection = false;
       try {
-        let empreinte;
-        try {
-          empreinte = await sha256Hex(motDePasse);
-        } catch (err) {
-          console.error("Web Crypto indisponible :", err);
-          afficherErreur("Votre navigateur ne permet pas une connexion sécurisée ici. Ouvrez le site via http(s) plutôt qu'en fichier local.");
-          return;
-        }
-
-        // Le mot de passe de référence vit dans Supabase (table app_config,
-        // modifiable via "Changer le mot de passe" une fois connecté) —
-        // APP_PASSWORD_HASH (config.js) ne sert que de secours hors-ligne.
-        let hashReference = APP_PASSWORD_HASH;
-        try {
-          const { data, error } = await supabase.from("app_config").select("password_hash").eq("id", "main").single();
-          if (!error && data && data.password_hash) hashReference = data.password_hash;
-        } catch (err) {
-          console.error("Supabase injoignable pour la vérification du mot de passe, repli sur config.js :", err);
-        }
-
-        const identifiantValide = identifiant === APP_USERNAME;
-        const motDePasseValide = empreinte === hashReference;
-
-        if (identifiantValide && motDePasseValide) {
-          setBlocage({ tentatives: 0, bloqueJusqua: 0 });
-          sessionStorage.setItem("bdj_session", JSON.stringify({ actif: true, expire: Date.now() + DUREE_SESSION_MS }));
-          redirection = true;
-          window.location.href = "app.html";
-          return;
-        }
+          const compte = await connecterCompteLogiciel(identifiant, motDePasse);
+          if (compte) {
+            setBlocage({ tentatives: 0, bloqueJusqua: 0 });
+            sessionStorage.setItem("bdj_session", JSON.stringify({ ...compte, actif: true, expire: Date.now() + DUREE_SESSION_MS }));
+            redirection = true;
+            window.location.href = "app.html";
+            return;
+          }
 
         const tentatives = (guard.tentatives || 0) + 1;
         if (tentatives >= MAX_TENTATIVES) {

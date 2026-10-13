@@ -4,6 +4,7 @@
 
 var selectedEnfantId = null;
 var enregistrementEntreeEnCours = false;
+var correctionEntreeEnCours = false;
 var TRANCHE_LABELS_ENTREE = { t1: "1ère tranche", t2: "2ème tranche", t3: "3ème tranche" };
 
 // ============================================================
@@ -107,11 +108,9 @@ var SECTEURS_PHASE1_FRAIS_GENERAUX = [
   "Scolarité Maternelle", "Scolarité Primaire"
 ];
 
-// Mensualités : dans un même paiement, les secteurs de mensualités cochés
-// partagent le montant PROPORTIONNELLEMENT à leurs dettes restantes — un
-// enfant qui règle le petit-déjeuner et le goûter ne doit pas voir tout le
-// montant partir en déjeuner (et inversement). Petit-déjeuner, Déjeuner et
-// Cantine visent la même catégorie : ils sont regroupés en un seul lot.
+// Mensualités : solder les services cochés du mois avant le mois suivant.
+// Si le montant est insuffisant, répartir uniquement entre les reliquats
+// de ce mois. Petit-déjeuner et déjeuner restent des cibles distinctes.
 var SECTEURS_MENSUALITES = [
   "Crèche", "Cantine", "Petit-déjeuner", "Déjeuner", "Cantine crèche", "Goûter", "Garderie"
 ];
@@ -184,6 +183,7 @@ function poidsMensualite(postes, idxDepart, moisDepart) {
   const MOIS_ORD = ["Sep","Oct","Nov","Déc","Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû"];
   let poids = 0;
   postes.forEach(p => {
+    if (posteEstAbsent(p)) return;
     if (p.mois && MOIS_ORD.indexOf(p.mois) < idxDepart) return;
     poids += Math.max((p.du || 0) - (p.paye || 0), 0);
     if (p.is_reduit && !(p.du > 0) && moisDepart && moisDepart === p.mois) {
@@ -275,7 +275,7 @@ function imputerPaiementTranche(postes, montant, trancheDepart) {
 //      assurance), puis la scolarité — on ne touche à la scolarité que
 //      quand les frais généraux du paiement sont réglés ;
 //   2. les mensualités cochées (crèche, cantine, goûter, garderie…)
-//      partagent le montant proportionnellement à leurs dettes restantes ;
+//      sont soldées mois par mois, à partir du mois choisi ;
 //   3. les postes à montant libre (uniformes, fournitures, halte…)
 //      partagent ce qui reste à parts égales ;
 //   4. le surplus finit en « Avance / Trop-perçu ».
@@ -344,7 +344,7 @@ function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart,
     reste -= allouer;
   });
 
-  // ── Étape 2 — mensualités : part proportionnelle aux dettes restantes ──
+  // ── Étape 2 — solder les services d'un mois avant le mois suivant ──
   const groupesParCat = {};
   avecDette.filter(s => SECTEURS_MENSUALITES.includes(s)).forEach(sect => {
     const cat = SECTEUR_CAT_ALLOCATION[sect] || sect;
@@ -356,33 +356,36 @@ function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart,
   });
   const groupes = Object.keys(groupesParCat).map(k => groupesParCat[k]);
 
-  if (reste > 0 && groupes.length > 0) {
-    groupes.forEach(g => { g.poids = poidsMensualite(g.postes, idxDepart, moisDepart); });
-    const totalPoids = groupes.reduce((s, g) => s + g.poids, 0);
+  // Les anciens postes sans mois conservent leur priorité historique.
+  [null, ...MOIS_ORD.slice(idxDepart)].forEach(mois => {
+    if (reste <= 0 || groupes.length === 0) return;
+    const lots = groupes.map(g => ({ ...g, postes: g.postes.filter(p => (p.mois || null) === mois && !posteEstAbsent(p)) }));
+    lots.forEach(g => { g.poids = poidsMensualite(g.postes, idxDepart, moisDepart); });
+    const totalPoids = lots.reduce((s, g) => s + g.poids, 0);
     let alloues;
 
     if (totalPoids <= 0) {
-      alloues = groupes.map(() => 0);
+      alloues = lots.map(() => 0);
     } else if (reste >= totalPoids) {
       // Assez pour tout solder : chaque lot reçoit le montant de sa dette.
-      alloues = groupes.map(g => g.poids);
+      alloues = lots.map(g => g.poids);
       reste -= totalPoids;
     } else {
       // Montant insuffisant : chaque lot reçoit sa part proportionnelle.
-      alloues = groupes.map(g => Math.floor((reste * g.poids) / totalPoids));
+      alloues = lots.map(g => Math.floor((reste * g.poids) / totalPoids));
       let ecart = reste - alloues.reduce((s, a) => s + a, 0);
-      const indices = groupes.map((g, i) => i).sort((a, b) => groupes[b].poids - groupes[a].poids);
+      const indices = lots.map((g, i) => i).filter(i => lots[i].poids > 0).sort((a, b) => lots[b].poids - lots[a].poids);
       let k = 0;
       while (ecart > 0 && indices.length > 0) { alloues[indices[k % indices.length]]++; k++; ecart--; }
       reste = 0;
     }
 
-    groupes.forEach((g, i) => {
+    lots.forEach((g, i) => {
       if (alloues[i] <= 0) return;
       imputerPaiement(postes, g.cat, alloues[i], moisDepart, g.postes)
         .forEach(a => allocations.push({ ...a, secteur: g.secteur }));
     });
-  }
+  });
 
   // ── Étape 3 — postes restants : d'abord les dettes fixes, puis le
   // montant libre (parts égales entre les secteurs concernés) ──
@@ -437,15 +440,119 @@ function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart,
 }
 
 // ============================================================
-// COMPLÉTION DES POSTES D'UN DOSSIER
+// CORRECTION DES ANCIENNES RÉPARTITIONS MENSUELLES
 // ============================================================
-// Certains dossiers (créés par une version antérieure du logiciel, ou
-// synchronisés hors ligne) n'ont pas tous les postes standards — typiquement
-// les frais généraux (activités parascolaires, fêtes scolaires, assurance,
-// APE) d'un élève de Maternelle/Primaire. On les recrée à partir de
-// buildPostes() sans jamais toucher aux postes existants ni à leurs montants
-// déjà payés. Le paiement en cours persiste ensuite les postes via
-// dbUpsertPostes (voir handleCreateEntree).
+// Correction contrôlée d'un ancien paiement couvrant plusieurs services.
+function correctionMensuelleEnAttente(enfantId) {
+  return STATE.entrees.some(en => en.enfant_id === enfantId && en.allocations?.[0]?.correction?.etat === "a_appliquer");
+}
+
+function entreeRepartitionCorrigeable(entree) {
+  const secteurs = (entree.sect || "").split(",").map(s => s.trim()).filter(Boolean);
+  return secteurs.length > 1 && secteurs.every(s => SECTEURS_MENSUALITES.includes(s)) &&
+    Array.isArray(entree.allocations) && entree.allocations.length > 0 &&
+    !entree.allocations.some(a => a.methode === "mensuel_v2" || a.correction);
+}
+
+function preparerCorrectionMensuelle(entree, mois) {
+  if (!entreeRepartitionCorrigeable(entree)) throw new Error("Ce paiement ne peut pas être corrigé par cette répartition automatique.");
+  if (!MOIS_CRECHE.includes(mois)) throw new Error("Choisissez le mois réellement payé.");
+  const enfant = STATE.enfants.find(e => e.id === entree.enfant_id);
+  if (!enfant) throw new Error("Dossier introuvable.");
+  if (correctionMensuelleEnAttente(enfant.id)) throw new Error("Une correction attend sa synchronisation. Rechargez la page avant de corriger un autre paiement.");
+  const avant = STATE.postes.filter(p => p.enfant_id === enfant.id).map(p => ({ ...p }));
+  const postes = avant.map(p => ({ ...p }));
+  const montant = Number(entree.mt);
+  if (entree.allocations.reduce((s, a) => s + Number(a.montant), 0) !== montant) throw new Error("L'historique n'explique pas la totalité du paiement. Une vérification manuelle est nécessaire.");
+  entree.allocations.forEach(a => {
+    const p = postes.find(p => p.id === a.poste_id);
+    if (!p || !Number.isSafeInteger(a.montant) || a.montant <= 0 || (p.paye || 0) < a.montant) throw new Error("L'historique de ce paiement est incomplet ou incohérent. Aucun montant n'a été modifié.");
+    p.paye -= a.montant;
+  });
+  const secteurs = entree.sect.split(",").map(s => s.trim()).filter(Boolean);
+  const nouvelle = imputerPaiementMultiSecteur(postes, secteurs, montant, mois);
+  postes.forEach(p => { if (!p.id) { p.id = `${enfant.id}_${p.key}_${p.cat}`; p.enfant_id = enfant.id; } });
+  const allocations = nouvelle.map(a => ({ poste_id: a.poste.id, montant: a.montant,
+    secteur: a.secteur || secteurEnregistrementPoste(a.poste, enfant), poste: { ...a.poste }, methode: "mensuel_v2" }));
+  if (allocations.reduce((s, a) => s + a.montant, 0) !== montant) throw new Error("Le montant total doit rester inchangé.");
+  const changements = postes.filter(p => {
+    const ancien = avant.find(x => x.id === p.id);
+    return !ancien || ancien.paye !== p.paye || ancien.du !== p.du;
+  }).map(p => ({ avant: avant.find(x => x.id === p.id) || null, apres: { ...p } }));
+  if (!changements.length) throw new Error("La répartition de ce paiement est déjà correcte pour ce mois.");
+  allocations[0].correction = { etat: "a_appliquer", mois_avant: entree.mois,
+    allocations_avant: entree.allocations, postes: changements };
+  return { mois, allocations, changements };
+}
+
+// Journal durable dans le JSON des allocations : si une écriture échoue,
+// le prochain chargement termine la correction sans recréer de paiement.
+async function appliquerCorrectionMensuelle(entree) {
+  const journal = entree.allocations?.[0]?.correction;
+  if (journal?.etat !== "a_appliquer") return;
+  const aSauver = journal.postes.map(ch => {
+    const p = STATE.postes.find(p => p.id === ch.apres.id);
+    const identique = attendu => attendu && p && Number(p.du) === Number(attendu.du) && Number(p.paye) === Number(attendu.paye);
+    if (!(identique(ch.avant) || identique(ch.apres) || (!p && !ch.avant))) throw new Error("Un montant a changé pendant la correction. Vérification nécessaire avant de poursuivre.");
+    return { ...ch.apres };
+  });
+  await dbUpsertPostes(aSauver);
+  aSauver.forEach(p => {
+    const i = STATE.postes.findIndex(x => x.id === p.id);
+    if (i < 0) STATE.postes.push(p); else STATE.postes[i] = p;
+  });
+  const allocations = JSON.parse(JSON.stringify(entree.allocations));
+  allocations[0].correction.etat = "appliquee";
+  await dbUpdateEntree(entree.id, { allocations });
+  entree.allocations = allocations;
+}
+
+function openCorrectionMensuelleModal(entreeId) {
+  const entree = STATE.entrees.find(en => en.id === entreeId);
+  if (!entree) return;
+  const moisDate = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"][Number((entree.date || "").slice(5, 7)) - 1];
+  const moisInitial = MOIS_CRECHE.includes(entree.mois) ? entree.mois : (moisDate || "Oct");
+  openModal(`
+    <div class="modal-title">Corriger la répartition — ${escapeHtml(entree.nom)}</div>
+    <p class="modal-text">Paiement du ${formatDateFR(entree.date)} : ${fmtFCFA(entree.mt)}. Vérifiez le mois et les montants proposés. Les paiements saisis séparément sont conservés.</p>
+    <div class="field"><label>Mois réellement payé</label><select id="correctionMois">${MOIS_CRECHE.map(m => `<option ${m === moisInitial ? "selected" : ""}>${m}</option>`).join("")}</select></div>
+    <div id="correctionApercu"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="correctionAnnuler">Annuler</button><button class="btn btn-primary" id="correctionValider">Appliquer la correction</button></div>
+  `);
+  let proposition;
+  const apercu = () => {
+    const bouton = document.getElementById("correctionValider");
+    try {
+      proposition = preparerCorrectionMensuelle(entree, document.getElementById("correctionMois").value);
+      document.getElementById("correctionApercu").innerHTML = `<div style="max-height:40vh;overflow:auto">${proposition.changements.map(ch => `<p><strong>${escapeHtml(ch.apres.label)}</strong><br>Versé : ${fmtFCFA(ch.avant?.paye || 0)} → ${fmtFCFA(ch.apres.paye)}</p>`).join("")}</div><p>Total encaissé conservé : <strong>${fmtFCFA(entree.mt)}</strong>.</p>`;
+      bouton.disabled = false;
+    } catch (err) { proposition = null; bouton.disabled = true; document.getElementById("correctionApercu").textContent = err.message; }
+  };
+  apercu();
+  document.getElementById("correctionMois").addEventListener("change", apercu);
+  document.getElementById("correctionAnnuler").addEventListener("click", closeModal);
+  document.getElementById("correctionValider").addEventListener("click", async ev => {
+    if (!proposition || correctionEntreeEnCours || enregistrementEntreeEnCours) return;
+    ev.currentTarget.disabled = true;
+    correctionEntreeEnCours = true;
+    try {
+      // Recalculer au dernier moment pour ne pas écraser une saisie récente.
+      proposition = preparerCorrectionMensuelle(entree, document.getElementById("correctionMois").value);
+      await dbUpdateEntree(entree.id, { mois: proposition.mois, allocations: proposition.allocations });
+      entree.mois = proposition.mois;
+      entree.allocations = proposition.allocations;
+      await appliquerCorrectionMensuelle(entree);
+      closeModal(); refreshAllTabs(); showToast("Répartition corrigée, montant encaissé inchangé.", "success");
+    } catch (err) {
+      closeModal(); refreshAllTabs();
+      showToast(`${err.message}${correctionMensuelleEnAttente(entree.enfant_id) ? " Correction enregistrée mais synchronisation incomplète : rechargez la page, sans ressaisir le paiement." : " Aucun paiement supplémentaire n'a été enregistré."}`, "error");
+    } finally { correctionEntreeEnCours = false; }
+  });
+}
+
+// Dossiers anciens : recréer les postes standards manquants à partir de
+// buildPostes, sans toucher aux montants déjà payés. Le paiement en cours
+// les persiste ensuite avec dbUpsertPostes.
 function completerPostesEnfant(enfant) {
   const cles = new Set(STATE.postes.filter(p => p.enfant_id === enfant.id).map(p => p.key));
   const attendus = fabriquerPostesEnfant(enfant.id, enfant.sect, enfant.stat, enfant.opt || {});
@@ -463,15 +570,17 @@ function completerPostesEnfant(enfant) {
 // ============================================================
 async function handleCreateEntree(e) {
   e.preventDefault();
-  if (enregistrementEntreeEnCours) return;
+  if (enregistrementEntreeEnCours || correctionEntreeEnCours) return;
 
   const date = document.getElementById("eDate").value;
   const nom = document.getElementById("eNom").value.trim();
   const montant = parseFloat(document.getElementById("eMontant").value);
   const mode = document.getElementById("eMode").value;
-  const moisDepart = document.getElementById("eMois").value || null;
+  const moisChoisi = document.getElementById("eMois").value || null;
   const note = document.getElementById("eNote").value.trim();
   const secteurs = Array.from(document.querySelectorAll('input[name="eSect"]:checked')).map(cb => cb.value);
+  const moisDate = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"][Number(date.slice(5, 7)) - 1];
+  const moisDepart = moisChoisi || (secteurs.some(s => SECTEURS_MENSUALITES.includes(s)) ? moisDate : null);
   const champsRepartition = Array.from(document.querySelectorAll("#eRepartition [data-montant-secteur]"));
   const repartition = champsRepartition.some(input => input.value !== "")
     ? Object.fromEntries(champsRepartition.map(input => [input.dataset.montantSecteur, input.value === "" ? NaN : Number(input.value)])) : null;
@@ -493,6 +602,11 @@ async function handleCreateEntree(e) {
   const enfant = selectedEnfantId
     ? STATE.enfants.find(x => x.id === selectedEnfantId)
     : STATE.enfants.find(x => x.nom.toLowerCase() === nom.toLowerCase());
+
+  if (enfant && correctionMensuelleEnAttente(enfant.id)) {
+    showToast("Une correction de répartition attend sa synchronisation. Rechargez la page avant de saisir un autre paiement.", "error");
+    return;
+  }
 
   // Les secteurs sont imputés et enregistrés dans l'ordre de priorité :
   // frais généraux d'abord, puis scolarité, puis mensualités, puis montant
@@ -555,7 +669,8 @@ async function handleCreateEntree(e) {
       // Trace précisément quel poste a reçu quoi, pour pouvoir annuler
       // ce paiement proprement si l'entrée est supprimée plus tard.
       entree.allocations = allocations.map(a => ({ poste_id: a.poste.id, montant: a.montant,
-        secteur: a.secteur || secteurEnregistrementPoste(a.poste, enfant), poste: { ...a.poste } }));
+        secteur: a.secteur || secteurEnregistrementPoste(a.poste, enfant), poste: { ...a.poste },
+        methode: "mensuel_v2", repartition_explicit: !!repartition }));
     }
 
     await dbInsertEntree(entree);
@@ -608,8 +723,7 @@ function openConfirmerEnvoiRecuModal(enfant, entree) {
   document.getElementById("modalNon").addEventListener("click", closeModal);
   document.getElementById("modalOui").addEventListener("click", () => {
     const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
-    sendWhatsApp(enfant.tel, buildReceiptMessage(enfant, entree, postesEnfant));
-    closeModal();
+    ouvrirModeleParent(enfant, "recu_paiement", { entree });
   });
 }
 
@@ -689,12 +803,14 @@ function renderEntreesList() {
       const enfant = en && en.enfant_id ? STATE.enfants.find(x => x.id === en.enfant_id) : null;
       if (!enfant) return;
       const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
-      sendWhatsApp(enfant.tel, buildReceiptMessage(enfant, en, postesEnfant));
+      ouvrirModeleParent(enfant, "recu_paiement", { entree: en });
     });
   });
 }
 
 function openDeleteEntreeModal(entreeId) {
+  const aSupprimer = STATE.entrees.find(en => en.id === entreeId);
+  if (correctionEntreeEnCours || (aSupprimer && correctionMensuelleEnAttente(aSupprimer.enfant_id))) { showToast("Rechargez la page pour terminer la correction avant de supprimer ce paiement.", "error"); return; }
   const entree = STATE.entrees.find(e => e.id === entreeId);
   if (!entree) return;
 

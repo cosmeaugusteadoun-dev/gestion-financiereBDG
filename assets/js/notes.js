@@ -425,7 +425,7 @@ function renderNotesForm() {
     const suivi = await sauvegarderSuivi(enfant, trim, existant, isMat, isCreche);
     if (suivi) {
       const postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id);
-      sendWhatsApp(enfant.tel, buildMessageBulletin(enfant, suivi, postesEnfant));
+      ouvrirModeleParent(enfant, "bulletin_trimestriel", { suivi });
       renderNotesForm();
       renderNotesMetriquesEtTable();
     }
@@ -471,8 +471,7 @@ function renderNotesFormClasse() {
       showToast("Aucun parent de cette classe n'a de numéro WhatsApp renseigné.", "error");
       return;
     }
-    avecTel.forEach(e => sendWhatsApp(e.tel, buildMessageSuiviClasse(sect, trim, suiviClasse.observation)));
-    showToast(`Diffusion lancée pour ${avecTel.length} parent(s). Autorisez les fenêtres pop-up si votre navigateur les bloque.`, "success");
+    openWhatsAppApiModal({ liste: avecTel, type: "information_classe", contextes: Object.fromEntries(avecTel.map(e => [e.id, { trim, observation: suiviClasse.observation }])) });
   });
 }
 
@@ -724,8 +723,8 @@ function envoyerEnMasse(liste, builder, libelle) {
     showToast("Aucun des parents concernés n'a de numéro WhatsApp renseigné.", "error");
     return;
   }
-  avecTel.forEach(x => sendWhatsApp(x.enfant.tel, builder(x.enfant, x.suivi, STATE.postes.filter(p => p.enfant_id === x.enfant.id))));
-  showToast(`Envoi lancé pour ${avecTel.length} parent(s). Autorisez les fenêtres pop-up si votre navigateur les bloque.`, "success");
+  const types = new Map([[buildMessageAlerteDifficulte,"alerte_difficulte"],[buildMessageAlerteAbsRet,"alerte_absences_retards"],[buildMessageAlerteComportement,"alerte_comportement"],[buildMessageBulletin,"bulletin_trimestriel"]]);
+  openWhatsAppApiModal({ liste: avecTel.map(x => x.enfant), type: types.get(builder), contextes: Object.fromEntries(avecTel.map(x => [x.enfant.id, { suivi: x.suivi }])) });
 }
 
 function handleAlerterDifficulte() {
@@ -757,8 +756,7 @@ function handleBulletinsAnnuelsATous() {
     showToast("Aucun des parents concernés n'a de numéro WhatsApp renseigné.", "error");
     return;
   }
-  avecTel.forEach(x => sendWhatsApp(x.enfant.tel, buildMessageBulletinAnnuel(x.enfant, x.suivis)));
-  showToast(`Envoi lancé pour ${avecTel.length} parent(s). Autorisez les fenêtres pop-up si votre navigateur les bloque.`, "success");
+  openWhatsAppApiModal({ liste: avecTel.map(x => x.enfant), type: "bulletin_annuel", contextes: {} });
 }
 
 // ============================================================
@@ -865,14 +863,14 @@ function renderNotesMetriquesEtTable() {
     btn.addEventListener("click", () => {
       const enfant = STATE.enfants.find(e => e.id === btn.dataset.notesWa);
       const suivi = STATE.suivi.find(s => s.enfant_id === enfant.id && s.trim === trim);
-      if (enfant && suivi) sendWhatsApp(enfant.tel, buildMessageBulletin(enfant, suivi, STATE.postes.filter(p => p.enfant_id === enfant.id)));
+      if (enfant && suivi) ouvrirModeleParent(enfant, "bulletin_trimestriel", { suivi });
     });
   });
 
   tableRoot.querySelectorAll("[data-notes-annuel]").forEach(btn => {
     btn.addEventListener("click", () => {
       const enfant = STATE.enfants.find(e => e.id === btn.dataset.notesAnnuel);
-      if (enfant) sendWhatsApp(enfant.tel, buildMessageBulletinAnnuel(enfant, suivisAnnuelsEnfant(enfant.id)));
+      if (enfant) ouvrirModeleParent(enfant, "bulletin_annuel");
     });
   });
 }
