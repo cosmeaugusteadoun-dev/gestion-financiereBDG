@@ -188,7 +188,7 @@ async function verifier() {
     assert.equal(poste("ptdej_Oct").paye, 5000); assert.equal(poste("dej_Oct").paye, 9000);
     assert.equal(poste("gout_Nov").paye, 1000); assert.equal(totalPaye(), avantCorrection);
     assert.equal(ctx.correctionMensuelleEnAttente(enfant.id), false); assert.equal(ctx.STATE.entrees.reduce((s, en) => s + en.mt, 0), 21000);
-    assert.equal(ctx.entreeRepartitionCorrigeable(ctx.STATE.entrees[1]), false); assert.equal(ctx.entreeRepartitionCorrigeable(entree), false);
+    assert.equal(ctx.entreeRepartitionCorrigeable(ctx.STATE.entrees[1]), true); assert.equal(ctx.entreeRepartitionCorrigeable(entree), true);
   });
   const sansTrace = { ...entree, allocations: [] };
   test("ancien paiement sans trace : aucune correction hasardeuse", () => assert.throws(() => ctx.preparerCorrectionMensuelle(sansTrace, "Oct"), /ne peut pas/));

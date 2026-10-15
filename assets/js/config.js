@@ -24,6 +24,15 @@ window.APP_PASSWORD_HASH = "6051fc84a7a0d74c225fb18a496b09952da5642e60723ecae543
 // si la configuration Supabase est absente ou invalide.
 try {
   window.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON, {
+    global: { fetch: async (url, options = {}) => {
+      // Réessayer uniquement les lectures et PATCH idempotents après une coupure.
+      // Aucun nouvel essai automatique pour les paiements ou messages (POST).
+      try { return await fetch(url, options); }
+      catch (err) {
+        if (!["GET", "HEAD", "PATCH"].includes((options.method || "GET").toUpperCase())) throw err;
+        return fetch(url, options);
+      }
+    } },
     // Conserver l'authentification entre les pages, uniquement dans cet onglet.
     auth: { persistSession: true, storage: window.sessionStorage }
   });

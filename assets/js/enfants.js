@@ -548,6 +548,7 @@ function openMoisServicesModal(enfantId) {
           <option value="absent" ${posteEstAbsent(p) ? "selected" : ""}>Absent / non souscrit</option>
         </select>
       </div>`).join("")}</div>
+    <p id="presenceErreur" role="alert" class="text-red" hidden></p>
     <div class="modal-actions"><button class="btn btn-ghost" id="presenceAnnuler">Annuler</button><button class="btn btn-primary" id="presenceEnregistrer">Enregistrer</button></div>
   `);
   document.getElementById("presenceAnnuler").addEventListener("click", closeModal);
@@ -561,7 +562,12 @@ function openMoisServicesModal(enfantId) {
       await enregistrerMoisNonSouscrits(enfant, choix);
       closeModal(); refreshAllTabs();
       showToast("Participation mensuelle enregistrée.", "success");
-    } catch (err) { bouton.disabled = false; showToast(err.message, "error"); }
+    } catch (err) {
+      bouton.disabled = false;
+      const zone = document.getElementById("presenceErreur");
+      zone.hidden = false; zone.textContent = err.message;
+      showToast(err.message, "error");
+    }
   });
 }
 
@@ -813,7 +819,11 @@ function openEditProfilModal(enfantId, champCible) {
       <div class="field" style="grid-column:1 / -1"><label class="checkbox-item"><input type="checkbox" id="editConsentWhatsApp" ${consentementWhatsAppValide(enfant) ? "checked" : ""}> Le parent a consenti à recevoir les notifications WhatsApp</label><div class="field-hint" id="editConsentHint">${consentementWhatsAppValide(enfant) ? `Accord enregistré le ${formatDateFR(enfant.opt.whatsapp_consent.recorded_at)}.` : "Aucun consentement valide enregistré."} La date est enregistrée automatiquement à la validation de l'accord.</div></div>
       <div class="field"><label>Date de naissance</label><input type="date" id="editDdn" value="${enfant.ddn||""}"></div>
       <div class="field" ${enfant.sect !== "creche" ? 'style="display:none;"' : ""}><label>Date d'inscription <span class="text-muted">(Crèche uniquement)</span></label><input type="date" id="editDateInscription" value="${enfant.date_inscription||""}"></div>
+      <details style="grid-column:1 / -1"><summary>Présence / absence par service et par mois</summary>
+        ${STATE.postes.filter(p => p.enfant_id === enfant.id && p.mois && !p.is_var && !p.is_remise).sort((a,b) => MOIS_CRECHE.indexOf(a.mois) - MOIS_CRECHE.indexOf(b.mois)).map(p => `<div class="field"><label>${escapeHtml(p.label)}</label><select data-profil-presence="${escapeHtml(p.key)}" ${Number(p.paye) > 0 ? "disabled" : ""}><option value="actif" ${!posteEstAbsent(p) ? "selected" : ""}>Souscrit${Number(p.paye) > 0 ? " — paiement enregistré" : ""}</option><option value="absent" ${posteEstAbsent(p) ? "selected" : ""}>Absent / non souscrit</option></select></div>`).join("") || '<p>Aucun service mensuel souscrit.</p>'}
+      </details>
     </div>
+    <p id="profilErreur" role="alert" class="text-red" hidden></p>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="modalAnnuler">Annuler</button>
       <button class="btn btn-primary" id="modalEnregistrer"><i class="bi bi-check-lg"></i> Enregistrer</button>
@@ -840,7 +850,9 @@ function openEditProfilModal(enfantId, champCible) {
     document.getElementById("editConsentWhatsApp").checked = false;
     document.getElementById("editConsentHint").textContent = "Coordonnées modifiées : validez de nouveau l'accord pour ce contact.";
   }));
-  document.getElementById("modalEnregistrer").addEventListener("click", async () => {
+  document.getElementById("modalEnregistrer").addEventListener("click", async ev => {
+    const bouton = ev.currentTarget;
+    if (bouton.disabled) return;
     const patch = {
       nom: document.getElementById("editNom").value.trim(),
       sexe: document.getElementById("editSexe").value || null,
@@ -853,15 +865,32 @@ function openEditProfilModal(enfantId, champCible) {
     if (!patch.nom) { showToast("Le nom ne peut pas être vide.", "error"); return; }
 
     try {
+      bouton.disabled = true;
+      document.getElementById("profilErreur").hidden = true;
       patch.opt = { ...(enfant.opt || {}), whatsapp_consent: preparerConsentementWhatsApp(enfant.opt?.whatsapp_consent, document.getElementById("editConsentWhatsApp").checked, patch.tel, patch.parent) };
+      const choix = {};
+      document.querySelectorAll("[data-profil-presence]").forEach(el => { choix[el.dataset.profilPresence] = el.value === "absent"; });
+      const participation = preparerMoisNonSouscrits({ ...enfant, opt: patch.opt }, choix);
+      patch.opt = participation.opt;
+      if (correctionEntreeEnCours || correctionMensuelleEnAttente(enfant.id)) throw new Error("Terminez la correction de répartition avant de modifier le profil.");
       await dbUpdateEnfant(enfant.id, patch);
       Object.assign(enfant, patch);
+      const montantsModifies = participation.postes.filter(p => {
+        const avant = STATE.postes.find(x => x.id === p.id);
+        return !avant || Number(avant.du) !== Number(p.du) || Number(avant.paye) !== Number(p.paye);
+      });
+      await dbUpsertPostes(montantsModifies);
+      STATE.postes = STATE.postes.filter(p => p.enfant_id !== enfant.id).concat(participation.postes);
       closeModal();
       refreshAllTabs();
       showToast("Profil mis à jour.", "success");
     } catch (err) {
       console.error(err);
-      showToast("Erreur lors de la mise à jour : " + err.message, "error");
+      const zone = document.getElementById("profilErreur");
+      zone.hidden = false;
+      zone.textContent = `Enregistrement incomplet : ${err.message}. Vos champs sont conservés. Vérifiez la connexion puis réessayez. Si les accès ont été restreints, connectez-vous avec votre compte Supabase.`;
+      bouton.disabled = false;
+      showToast("Le profil n'a pas pu être entièrement enregistré. Consultez le message du formulaire.", "error");
     }
   });
 }

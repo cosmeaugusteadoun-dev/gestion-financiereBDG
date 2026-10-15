@@ -183,8 +183,9 @@ async function dbInsertEnfant(enfant) {
 }
 
 async function dbUpdateEnfant(id, patch) {
-  const { error } = await supabase.from("enfants").update(patch).eq("id", id);
+  const { data, error } = await supabase.from("enfants").update(patch).eq("id", id).select("id").single();
   if (error) throw error;
+  if (!data || data.id !== id) throw new Error("Le dossier n'a pas été enregistré. Vérifiez votre session et les droits Supabase.");
 }
 
 async function dbDeleteEnfant(id) {

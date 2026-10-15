@@ -78,6 +78,12 @@ function parametresModeleEnfant(modele, enfant, contexte) {
   return modele.fields.map(f => parametreWhatsApp(v[f.key]));
 }
 function ouvrirModeleParent(e, type, contexte = {}) {
-  if (!consentementWhatsAppValide(e)) { showToast("Validez le consentement WhatsApp dans le profil avant l'envoi.", "error"); return; }
-  return openWhatsAppApiModal({ liste: [e], type, contextes: { [e.id]: contexte } });
+  const postes = STATE.postes.filter(p => p.enfant_id === e.id);
+  let message;
+  if (type === "recu_paiement") message = buildReceiptMessage(e, contexte.entree, postes, (contexte.entree.sect || "").split(",").map(s => s.trim()));
+  else if (type === "bulletin_trimestriel") message = buildMessageBulletin(e, contexte.suivi, postes);
+  else if (type === "bulletin_annuel") message = buildMessageBulletinAnnuel(e, suivisAnnuelsEnfant(e.id));
+  else if (type === "renouvellement_creche") message = buildMessageRenouvellementCreche(e, contexte.dateRenouvellement);
+  else message = buildBilanMessage(e, postes, STATE.suivi.filter(s => s.enfant_id === e.id));
+  return sendWhatsApp(e.tel, message);
 }

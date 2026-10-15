@@ -471,7 +471,7 @@ function renderNotesFormClasse() {
       showToast("Aucun parent de cette classe n'a de numéro WhatsApp renseigné.", "error");
       return;
     }
-    openWhatsAppApiModal({ liste: avecTel, type: "information_classe", contextes: Object.fromEntries(avecTel.map(e => [e.id, { trim, observation: suiviClasse.observation }])) });
+    ouvrirListeWhatsAppClassique(avecTel.map(e => ({ enfant: e, message: buildMessageSuiviClasse(e.sect, trim, suiviClasse.observation) })));
   });
 }
 
@@ -723,8 +723,7 @@ function envoyerEnMasse(liste, builder, libelle) {
     showToast("Aucun des parents concernés n'a de numéro WhatsApp renseigné.", "error");
     return;
   }
-  const types = new Map([[buildMessageAlerteDifficulte,"alerte_difficulte"],[buildMessageAlerteAbsRet,"alerte_absences_retards"],[buildMessageAlerteComportement,"alerte_comportement"],[buildMessageBulletin,"bulletin_trimestriel"]]);
-  openWhatsAppApiModal({ liste: avecTel.map(x => x.enfant), type: types.get(builder), contextes: Object.fromEntries(avecTel.map(x => [x.enfant.id, { suivi: x.suivi }])) });
+  ouvrirListeWhatsAppClassique(avecTel.map(x => ({ enfant: x.enfant, message: builder(x.enfant, x.suivi, STATE.postes.filter(p => p.enfant_id === x.enfant.id)) })));
 }
 
 function handleAlerterDifficulte() {
@@ -756,7 +755,7 @@ function handleBulletinsAnnuelsATous() {
     showToast("Aucun des parents concernés n'a de numéro WhatsApp renseigné.", "error");
     return;
   }
-  openWhatsAppApiModal({ liste: avecTel.map(x => x.enfant), type: "bulletin_annuel", contextes: {} });
+  ouvrirListeWhatsAppClassique(avecTel.map(x => ({ enfant: x.enfant, message: buildMessageBulletinAnnuel(x.enfant, x.suivis) })));
 }
 
 // ============================================================

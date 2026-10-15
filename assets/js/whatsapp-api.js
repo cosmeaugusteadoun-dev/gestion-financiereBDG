@@ -84,6 +84,7 @@ async function openWhatsAppApiModal(contexte) {
     }
     openModal(`
       <div class="modal-title">Envoi automatique à ${file.destinataires.length} parent(s)</div>
+      <p class="field-hint">Messagerie collective via le numéro API de l'école : +229 01 49 77 77 00.</p>
       <p class="modal-text">${source.length - liste.length} dossier(s) exclus sans consentement valide. Les modèles personnalisés produisent un message par enfant : chaque enfant d'un même parent conserve ses propres informations.</p>
       <div class="field"><label>Modèle approuvé</label><select id="apiModele">${config.templates.map((t, i) => `<option value="${i}">${escapeHtml(t.label || t.name)} (${escapeHtml(t.language)})</option>`).join("")}</select></div>
       <div id="apiParametres"></div>

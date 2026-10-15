@@ -3,6 +3,15 @@
 L'intégration locale est préparée pour Meta Cloud API. Le token et le Phone Number ID
 restent côté serveur. Aucun message n'a été envoyé pendant le développement.
 
+L'API est réservée au bouton d'envoi groupé de **Messagerie collective**,
+avec le numéro de l'école **+229 01 49 77 77 00** associé au Phone Number ID Meta.
+Les boutons individuels de cette section et les autres boutons (bilans, reçus,
+anniversaires, notes et suivi, renouvellements) ouvrent WhatsApp classique avec
+les textes d'origine. Les envois de Notes et suivi utilisent également ce parcours
+classique, avec validation manuelle de chaque conversation.
+Le contact **01 97 91 94 52** reste dans les messages classiques. Leur expéditeur
+est le compte connecté dans l'application WhatsApp utilisée, à choisir sur le téléphone.
+
 ## 1. Préparer le serveur Supabase
 
 Dans le SQL Editor du projet existant, exécuter

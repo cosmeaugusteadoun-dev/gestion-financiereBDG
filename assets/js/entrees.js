@@ -285,6 +285,7 @@ function imputerPaiementTranche(postes, montant, trancheDepart) {
 function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart, repartition, cibleExplicite = false) {
   if (!Number.isSafeInteger(montantTotal) || montantTotal <= 0) throw new Error("Le montant doit être un nombre entier positif de francs CFA.");
   secteurs = [...new Set(secteurs)];
+  postes.forEach(p => { p.du = Number(p.du) || 0; p.paye = Number(p.paye) || 0; });
   if (repartition) {
     if (secteurs.some(s => !Number.isSafeInteger(repartition[s]) || repartition[s] < 0) ||
         Math.abs(secteurs.reduce((s, sect) => s + repartition[sect], 0) - montantTotal) > 0.001) {
@@ -371,13 +372,9 @@ function imputerPaiementMultiSecteur(postes, secteurs, montantTotal, moisDepart,
       alloues = lots.map(g => g.poids);
       reste -= totalPoids;
     } else {
-      // Montant insuffisant : chaque lot reçoit sa part proportionnelle.
-      alloues = lots.map(g => Math.floor((reste * g.poids) / totalPoids));
-      let ecart = reste - alloues.reduce((s, a) => s + a, 0);
-      const indices = lots.map((g, i) => i).filter(i => lots[i].poids > 0).sort((a, b) => lots[b].poids - lots[a].poids);
-      let k = 0;
-      while (ecart > 0 && indices.length > 0) { alloues[indices[k % indices.length]]++; k++; ecart--; }
-      reste = 0;
+      // Solder un service avant le suivant, sans ventilation proportionnelle.
+      // Les montants saisis par secteur restent prioritaires via `repartition`.
+      alloues = lots.map(g => { const part = Math.min(reste, g.poids); reste -= part; return part; });
     }
 
     lots.forEach((g, i) => {
@@ -449,28 +446,31 @@ function correctionMensuelleEnAttente(enfantId) {
 
 function entreeRepartitionCorrigeable(entree) {
   const secteurs = (entree.sect || "").split(",").map(s => s.trim()).filter(Boolean);
-  return secteurs.length > 1 && secteurs.every(s => SECTEURS_MENSUALITES.includes(s)) &&
+  return !!entree.enfant_id && secteurs.length > 0 &&
     Array.isArray(entree.allocations) && entree.allocations.length > 0 &&
-    !entree.allocations.some(a => a.methode === "mensuel_v2" || a.correction);
+    !entree.allocations.some(a => a.correction?.etat === "a_appliquer");
 }
 
-function preparerCorrectionMensuelle(entree, mois) {
+function preparerCorrectionMensuelle(entree, mois, repartition = null) {
   if (!entreeRepartitionCorrigeable(entree)) throw new Error("Ce paiement ne peut pas être corrigé par cette répartition automatique.");
-  if (!MOIS_CRECHE.includes(mois)) throw new Error("Choisissez le mois réellement payé.");
+  if (![...MOIS_CRECHE, "t1", "t2", "t3"].includes(mois)) throw new Error("Choisissez le mois ou la tranche réellement payé.");
   const enfant = STATE.enfants.find(e => e.id === entree.enfant_id);
   if (!enfant) throw new Error("Dossier introuvable.");
   if (correctionMensuelleEnAttente(enfant.id)) throw new Error("Une correction attend sa synchronisation. Rechargez la page avant de corriger un autre paiement.");
   const avant = STATE.postes.filter(p => p.enfant_id === enfant.id).map(p => ({ ...p }));
   const postes = avant.map(p => ({ ...p }));
   const montant = Number(entree.mt);
+  if (repartition && Object.values(repartition).some(v => !Number.isSafeInteger(v) || v < 0)) throw new Error("Les montants par secteur doivent être des entiers positifs ou nuls.");
   if (entree.allocations.reduce((s, a) => s + Number(a.montant), 0) !== montant) throw new Error("L'historique n'explique pas la totalité du paiement. Une vérification manuelle est nécessaire.");
   entree.allocations.forEach(a => {
     const p = postes.find(p => p.id === a.poste_id);
-    if (!p || !Number.isSafeInteger(a.montant) || a.montant <= 0 || (p.paye || 0) < a.montant) throw new Error("L'historique de ce paiement est incomplet ou incohérent. Aucun montant n'a été modifié.");
-    p.paye -= a.montant;
+    const montantAllocation = Number(a.montant);
+    if (!p || !Number.isSafeInteger(montantAllocation) || montantAllocation <= 0 || (Number(p.paye) || 0) < montantAllocation) throw new Error("L'historique de ce paiement est incomplet ou incohérent. Aucun montant n'a été modifié.");
+    p.paye = Number(p.paye) - montantAllocation;
   });
-  const secteurs = entree.sect.split(",").map(s => s.trim()).filter(Boolean);
-  const nouvelle = imputerPaiementMultiSecteur(postes, secteurs, montant, mois);
+  const secteurs = repartition ? Object.keys(repartition).filter(s => repartition[s] > 0) : entree.sect.split(",").map(s => s.trim()).filter(Boolean);
+  if (!secteurs.length) throw new Error("Indiquez les secteurs et montants réellement payés.");
+  const nouvelle = imputerPaiementMultiSecteur(postes, secteurs, montant, mois, repartition);
   postes.forEach(p => { if (!p.id) { p.id = `${enfant.id}_${p.key}_${p.cat}`; p.enfant_id = enfant.id; } });
   const allocations = nouvelle.map(a => ({ poste_id: a.poste.id, montant: a.montant,
     secteur: a.secteur || secteurEnregistrementPoste(a.poste, enfant), poste: { ...a.poste }, methode: "mensuel_v2" }));
@@ -479,10 +479,10 @@ function preparerCorrectionMensuelle(entree, mois) {
     const ancien = avant.find(x => x.id === p.id);
     return !ancien || ancien.paye !== p.paye || ancien.du !== p.du;
   }).map(p => ({ avant: avant.find(x => x.id === p.id) || null, apres: { ...p } }));
-  if (!changements.length) throw new Error("La répartition de ce paiement est déjà correcte pour ce mois.");
+  if (!changements.length && mois === entree.mois && secteurs.join(", ") === entree.sect) throw new Error("La répartition de ce paiement est déjà correcte pour ce mois.");
   allocations[0].correction = { etat: "a_appliquer", mois_avant: entree.mois,
-    allocations_avant: entree.allocations, postes: changements };
-  return { mois, allocations, changements };
+    allocations_avant: entree.allocations.map(({ correction, ...a }) => a), postes: changements };
+  return { mois, sect: secteurs.join(", "), allocations, changements };
 }
 
 // Journal durable dans le JSON des allocations : si une écriture échoue,
@@ -511,25 +511,32 @@ function openCorrectionMensuelleModal(entreeId) {
   const entree = STATE.entrees.find(en => en.id === entreeId);
   if (!entree) return;
   const moisDate = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"][Number((entree.date || "").slice(5, 7)) - 1];
-  const moisInitial = MOIS_CRECHE.includes(entree.mois) ? entree.mois : (moisDate || "Oct");
+  const choixEcheances = [...MOIS_CRECHE, "t1", "t2", "t3"];
+  const moisInitial = choixEcheances.includes(entree.mois) ? entree.mois : (moisDate || "Oct");
   openModal(`
     <div class="modal-title">Corriger la répartition — ${escapeHtml(entree.nom)}</div>
     <p class="modal-text">Paiement du ${formatDateFR(entree.date)} : ${fmtFCFA(entree.mt)}. Vérifiez le mois et les montants proposés. Les paiements saisis séparément sont conservés.</p>
-    <div class="field"><label>Mois réellement payé</label><select id="correctionMois">${MOIS_CRECHE.map(m => `<option ${m === moisInitial ? "selected" : ""}>${m}</option>`).join("")}</select></div>
+    <div class="field"><label>Mois / tranche réellement payé</label><select id="correctionMois">${choixEcheances.map(m => `<option value="${m}" ${m === moisInitial ? "selected" : ""}>${TRANCHE_LABELS_ENTREE[m] || m}</option>`).join("")}</select></div>
+    <details><summary>Ajuster les montants par secteur</summary><p>Laissez tout vide pour la répartition automatique. Sinon, renseignez les montants réellement payés (total : ${fmtFCFA(entree.mt)}). Les secteurs laissés vides reçoivent zéro.</p>${ORDRE_SECTEURS_ENTREE.map(s => `<div class="field"><label>${escapeHtml(s)}</label><input type="number" min="0" step="1" data-correction-secteur="${escapeHtml(s)}" placeholder="0"></div>`).join("")}</details>
     <div id="correctionApercu"></div>
     <div class="modal-actions"><button class="btn btn-ghost" id="correctionAnnuler">Annuler</button><button class="btn btn-primary" id="correctionValider">Appliquer la correction</button></div>
   `);
   let proposition;
+  const lireRepartition = () => {
+    const champs = Array.from(document.querySelectorAll("[data-correction-secteur]"));
+    return champs.some(el => el.value !== "") ? Object.fromEntries(champs.map(el => [el.dataset.correctionSecteur, el.value === "" ? 0 : Number(el.value)])) : null;
+  };
   const apercu = () => {
     const bouton = document.getElementById("correctionValider");
     try {
-      proposition = preparerCorrectionMensuelle(entree, document.getElementById("correctionMois").value);
+      proposition = preparerCorrectionMensuelle(entree, document.getElementById("correctionMois").value, lireRepartition());
       document.getElementById("correctionApercu").innerHTML = `<div style="max-height:40vh;overflow:auto">${proposition.changements.map(ch => `<p><strong>${escapeHtml(ch.apres.label)}</strong><br>Versé : ${fmtFCFA(ch.avant?.paye || 0)} → ${fmtFCFA(ch.apres.paye)}</p>`).join("")}</div><p>Total encaissé conservé : <strong>${fmtFCFA(entree.mt)}</strong>.</p>`;
       bouton.disabled = false;
     } catch (err) { proposition = null; bouton.disabled = true; document.getElementById("correctionApercu").textContent = err.message; }
   };
   apercu();
   document.getElementById("correctionMois").addEventListener("change", apercu);
+  document.querySelectorAll("[data-correction-secteur]").forEach(el => el.addEventListener("input", apercu));
   document.getElementById("correctionAnnuler").addEventListener("click", closeModal);
   document.getElementById("correctionValider").addEventListener("click", async ev => {
     if (!proposition || correctionEntreeEnCours || enregistrementEntreeEnCours) return;
@@ -537,8 +544,9 @@ function openCorrectionMensuelleModal(entreeId) {
     correctionEntreeEnCours = true;
     try {
       // Recalculer au dernier moment pour ne pas écraser une saisie récente.
-      proposition = preparerCorrectionMensuelle(entree, document.getElementById("correctionMois").value);
-      await dbUpdateEntree(entree.id, { mois: proposition.mois, allocations: proposition.allocations });
+      proposition = preparerCorrectionMensuelle(entree, document.getElementById("correctionMois").value, lireRepartition());
+      await dbUpdateEntree(entree.id, { mois: proposition.mois, sect: proposition.sect, allocations: proposition.allocations });
+      entree.sect = proposition.sect;
       entree.mois = proposition.mois;
       entree.allocations = proposition.allocations;
       await appliquerCorrectionMensuelle(entree);
@@ -788,6 +796,7 @@ function renderEntreesList() {
       <td>${escapeHtml(en.mode)}</td>
       <td>
         ${enfant ? `<button class="btn btn-whatsapp btn-sm" data-wa-entree="${en.id}" ${enfant.tel ? "" : "disabled"} title="Envoyer le reçu de paiement par WhatsApp"><i class="bi bi-whatsapp"></i></button>` : ""}
+        ${entreeRepartitionCorrigeable(en) ? `<button class="btn btn-secondary btn-sm" data-edit-repartition="${escapeHtml(en.id)}" title="Corriger la répartition"><i class="bi bi-pencil"></i></button>` : ""}
         <button class="btn btn-danger btn-sm" data-del-entree="${en.id}" title="Supprimer"><i class="bi bi-trash"></i></button>
       </td>
     </tr>`;
@@ -796,6 +805,7 @@ function renderEntreesList() {
   tbody.querySelectorAll("[data-del-entree]").forEach(btn => {
     btn.addEventListener("click", () => openDeleteEntreeModal(btn.dataset.delEntree));
   });
+  tbody.querySelectorAll("[data-edit-repartition]").forEach(btn => btn.addEventListener("click", () => openCorrectionMensuelleModal(btn.dataset.editRepartition)));
 
   tbody.querySelectorAll("[data-wa-entree]").forEach(btn => {
     btn.addEventListener("click", () => {

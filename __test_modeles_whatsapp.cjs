@@ -4,7 +4,7 @@ function element(id){if(!nodes.has(id))nodes.set(id,{value:'',checked:false,list
 let html='',alertes=[],envois=0;
 const ctx={console,crypto:webcrypto,window:{addEventListener(){},sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}},document:{getElementById:element,querySelectorAll:()=>[]},escapeHtml:String,fmtFCFA:n=>`${n} F CFA`,formatDateFR:d=>String(d).slice(0,10),openModal:s=>{html=s;},closeModal(){},refreshAllTabs(){},showToast:s=>alertes.push(s)};
 vm.createContext(ctx);
-for(const file of ['postes.js','whatsapp.js','whatsapp-modeles.js','whatsapp-api.js','enfants.js','dashboard.js'])vm.runInContext(fs.readFileSync('assets/js/'+file,'utf8'),ctx);
+for(const file of ['postes.js','whatsapp.js','whatsapp-modeles.js','whatsapp-api.js','enfants.js','entrees.js','dashboard.js'])vm.runInContext(fs.readFileSync('assets/js/'+file,'utf8'),ctx);
 let n=0;
 ctx.Date=class extends Date {constructor(...args){super(...(args.length?args:['2026-10-13T12:00:00Z']));}};
 const test=(msg,fn)=>{fn();n++;console.log('OK '+msg);};
@@ -35,7 +35,8 @@ element('editConsentWhatsApp').checked=true;element('editTel').listeners.input()
 test('formulaire : modifier le téléphone décoche le consentement',()=>assert.equal(element('editConsentWhatsApp').checked,false));
 element('editConsentWhatsApp').checked=true;
 ctx.dbUpdateEnfant=async(_id,p)=>{ctx.patch=p;};
-await element('modalEnregistrer').listeners.click();
+ctx.dbUpsertPostes=async()=>{};
+await element('modalEnregistrer').listeners.click({currentTarget:element('modalEnregistrer')});
 test('profil sauvegardé : accord nouveau contact et options financières préservées',()=>{assert.equal(ctx.patch.opt.gard,'oui');assert.equal(ctx.patch.opt.whatsapp_consent.phone,'2290197000002');assert.equal(ctx.consentementWhatsAppValide(e),true);});
 const e2={...e,id:'e2',nom:'Ahmed',opt:{...e.opt,whatsapp_consent:{...e.opt.whatsapp_consent}}};ctx.STATE.enfants=[e,e2];
 ctx.supabase={auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}};
