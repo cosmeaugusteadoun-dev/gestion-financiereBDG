@@ -69,7 +69,7 @@ async function openWhatsAppApiModal(contexte) {
     // Les anniversaires gardent leur bouton individuel et les textes classiques.
     config.templates = (config.templates || []).filter(t => t.name !== "bdj_anniversaire");
     if (!config.templates?.length) {
-      openModal('<div class="modal-title">Modèle WhatsApp requis</div><p class="modal-text">Aucun modèle approuvé n’est configuré pour l’école. Faites approuver un modèle dans Meta puis ajoutez-le à la configuration serveur.</p><div class="modal-actions"><button class="btn btn-ghost" id="apiFermer">Fermer</button></div>');
+      openModal('<div class="modal-title">Liste des modèles à configurer</div><p class="modal-text">La connexion au serveur fonctionne, mais sa liste de modèles est vide. Les modèles actifs dans Meta ne sont pas importés automatiquement.</p><p class="modal-text">Dans Supabase → Edge Functions → Secrets, remplacez la valeur de WHATSAPP_TEMPLATES_JSON par le contenu du fichier whatsapp-collective-config.json fourni avec le logiciel, après vérification des noms, langues et variables dans Meta. Enregistrez puis rouvrez ce bouton.</p><div class="modal-actions"><button class="btn btn-ghost" id="apiFermer">Fermer</button></div>');
       document.getElementById("apiFermer").addEventListener("click", closeModal);
       return;
     }

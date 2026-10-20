@@ -1,0 +1,330 @@
+[
+  {
+    "name": "bdj_bilan_financier",
+    "language": "fr",
+    "label": "Bilan financier",
+    "body": "Bonjour {{1}},\nRécapitulatif concernant *{{2}}* — {{3}}.\nSituation financière au {{4}} :\nInscription / Réinscription : {{5}}\nActivités parascolaires : {{6}}\nFêtes scolaires : {{7}}\nAssurance : {{8}}\nAPE : {{9}}\nScolarité : {{10}}\nCrèche : {{11}}\nPetit-déjeuner : {{12}}\nDéjeuner : {{13}}\nCantine crèche : {{14}}\nGoûter : {{15}}\nGarderie : {{16}}\nUniformes : {{17}}\nFournitures : {{18}}\nRemise : {{19}}\nAvance : {{20}}\n*TOTAL EN RETARD : {{21}}*\nÉchéances : {{22}}\nMerci de respecter les délais indiqués.\n\nLes Bulles de Joie · Zongo 2, Parakou\nSecrétariat : 01 97 91 94 52",
+    "footer": "Amour · Travail · Discipline · Créativité",
+    "fields": [
+      {
+        "key": "parent",
+        "label": "parent",
+        "source": "enfant"
+      },
+      {
+        "key": "enfant",
+        "label": "enfant",
+        "source": "enfant"
+      },
+      {
+        "key": "section",
+        "label": "section",
+        "source": "enfant"
+      },
+      {
+        "key": "date",
+        "label": "date",
+        "source": "enfant"
+      },
+      {
+        "key": "inscription",
+        "label": "inscription",
+        "source": "enfant"
+      },
+      {
+        "key": "activites",
+        "label": "activites",
+        "source": "enfant"
+      },
+      {
+        "key": "fetes",
+        "label": "fetes",
+        "source": "enfant"
+      },
+      {
+        "key": "assurance",
+        "label": "assurance",
+        "source": "enfant"
+      },
+      {
+        "key": "ape",
+        "label": "ape",
+        "source": "enfant"
+      },
+      {
+        "key": "scolarite",
+        "label": "scolarite",
+        "source": "enfant"
+      },
+      {
+        "key": "creche",
+        "label": "creche",
+        "source": "enfant"
+      },
+      {
+        "key": "petit_dejeuner",
+        "label": "petit dejeuner",
+        "source": "enfant"
+      },
+      {
+        "key": "dejeuner",
+        "label": "dejeuner",
+        "source": "enfant"
+      },
+      {
+        "key": "cantine_creche",
+        "label": "cantine creche",
+        "source": "enfant"
+      },
+      {
+        "key": "gouter",
+        "label": "gouter",
+        "source": "enfant"
+      },
+      {
+        "key": "garderie",
+        "label": "garderie",
+        "source": "enfant"
+      },
+      {
+        "key": "uniformes",
+        "label": "uniformes",
+        "source": "enfant"
+      },
+      {
+        "key": "fournitures",
+        "label": "fournitures",
+        "source": "enfant"
+      },
+      {
+        "key": "remise",
+        "label": "remise",
+        "source": "enfant"
+      },
+      {
+        "key": "avance",
+        "label": "avance",
+        "source": "enfant"
+      },
+      {
+        "key": "total_retard",
+        "label": "total retard",
+        "source": "enfant"
+      },
+      {
+        "key": "echeances",
+        "label": "echeances",
+        "source": "enfant"
+      }
+    ]
+  },
+  {
+    "name": "bdj_relance_scolarite",
+    "language": "fr",
+    "label": "Relance scolarité",
+    "body": "Bonjour {{1}},\nSituation au {{2}} pour *{{3}}* — {{4}}.\nScolarité : {{5}}\n*TOTAL SCOLARITÉ EN RETARD : {{6}}*\nÉchéances : {{7}}\nMerci de respecter les délais indiqués.\n\nLes Bulles de Joie · Zongo 2, Parakou\nSecrétariat : 01 97 91 94 52",
+    "footer": "Amour · Travail · Discipline · Créativité",
+    "fields": [
+      {
+        "key": "parent",
+        "label": "parent",
+        "source": "enfant"
+      },
+      {
+        "key": "date",
+        "label": "date",
+        "source": "enfant"
+      },
+      {
+        "key": "enfant",
+        "label": "enfant",
+        "source": "enfant"
+      },
+      {
+        "key": "section",
+        "label": "section",
+        "source": "enfant"
+      },
+      {
+        "key": "scolarite",
+        "label": "scolarite",
+        "source": "enfant"
+      },
+      {
+        "key": "retard_scolarite",
+        "label": "retard scolarite",
+        "source": "enfant"
+      },
+      {
+        "key": "echeances",
+        "label": "echeances",
+        "source": "enfant"
+      }
+    ]
+  },
+  {
+    "name": "bdj_relance_cantine",
+    "language": "fr",
+    "label": "Relance cantine",
+    "body": "Bonjour {{1}},\nSituation au {{2}} pour *{{3}}* — {{4}}.\nPetit-déjeuner : {{5}}\nDéjeuner : {{6}}\nCantine crèche : {{7}}\n*TOTAL CANTINE EN RETARD : {{8}}*\nMerci de régulariser les échéances en retard.\n\nLes Bulles de Joie · Zongo 2, Parakou\nSecrétariat : 01 97 91 94 52",
+    "footer": "Amour · Travail · Discipline · Créativité",
+    "fields": [
+      {
+        "key": "parent",
+        "label": "parent",
+        "source": "enfant"
+      },
+      {
+        "key": "date",
+        "label": "date",
+        "source": "enfant"
+      },
+      {
+        "key": "enfant",
+        "label": "enfant",
+        "source": "enfant"
+      },
+      {
+        "key": "section",
+        "label": "section",
+        "source": "enfant"
+      },
+      {
+        "key": "petit_dejeuner",
+        "label": "petit dejeuner",
+        "source": "enfant"
+      },
+      {
+        "key": "dejeuner",
+        "label": "dejeuner",
+        "source": "enfant"
+      },
+      {
+        "key": "cantine_creche",
+        "label": "cantine creche",
+        "source": "enfant"
+      },
+      {
+        "key": "retard_cantine",
+        "label": "retard cantine",
+        "source": "enfant"
+      }
+    ]
+  },
+  {
+    "name": "bdj_alerte_difficulte",
+    "language": "fr",
+    "label": "Élève en difficulté",
+    "body": "Bonjour {{1}} 👋,\nNous souhaitons attirer votre attention sur les résultats de {{2}} au {{3}} (*{{4}}*), en difficulté selon notre grille d'évaluation.\nUn accompagnement rapproché à la maison et un échange avec l'équipe pédagogique pourraient beaucoup l'aider.\nN'hésitez pas à nous contacter pour en discuter ensemble.\n\nLes Bulles de Joie · Zongo 2, Parakou\nSecrétariat : 01 97 91 94 52",
+    "footer": "Amour · Travail · Discipline · Créativité",
+    "fields": [
+      {
+        "key": "parent",
+        "label": "parent",
+        "source": "enfant"
+      },
+      {
+        "key": "enfant",
+        "label": "enfant",
+        "source": "enfant"
+      },
+      {
+        "key": "trimestre",
+        "label": "trimestre",
+        "source": "enfant"
+      },
+      {
+        "key": "resultat",
+        "label": "resultat",
+        "source": "enfant"
+      }
+    ]
+  },
+  {
+    "name": "bdj_alerte_absences_retards",
+    "language": "fr",
+    "label": "Absences et retards",
+    "body": "Bonjour {{1}} 👋,\n⚠️ Nous constatons *{{2}} absence(s) non justifiée(s)* et *{{3}} retard(s) répétitif(s)* pour {{4}} au {{5}}.\nLa régularité est essentielle pour sa réussite : merci de veiller à sa ponctualité et de nous justifier ses absences.\n\nLes Bulles de Joie · Zongo 2, Parakou\nSecrétariat : 01 97 91 94 52",
+    "footer": "Amour · Travail · Discipline · Créativité",
+    "fields": [
+      {
+        "key": "parent",
+        "label": "parent",
+        "source": "enfant"
+      },
+      {
+        "key": "absences",
+        "label": "absences",
+        "source": "enfant"
+      },
+      {
+        "key": "retards",
+        "label": "retards",
+        "source": "enfant"
+      },
+      {
+        "key": "enfant",
+        "label": "enfant",
+        "source": "enfant"
+      },
+      {
+        "key": "trimestre",
+        "label": "trimestre",
+        "source": "enfant"
+      }
+    ]
+  },
+  {
+    "name": "bdj_alerte_comportement",
+    "language": "fr",
+    "label": "Comportement préoccupant",
+    "body": "Bonjour {{1}} 👋,\nNous aimerions échanger avec vous au sujet du comportement de {{2}} au {{3}}, jugé *préoccupant* par l'équipe.\nVotre implication nous serait précieuse pour l'accompagner au mieux.\n\nLes Bulles de Joie · Zongo 2, Parakou\nSecrétariat : 01 97 91 94 52",
+    "footer": "Amour · Travail · Discipline · Créativité",
+    "fields": [
+      {
+        "key": "parent",
+        "label": "parent",
+        "source": "enfant"
+      },
+      {
+        "key": "enfant",
+        "label": "enfant",
+        "source": "enfant"
+      },
+      {
+        "key": "trimestre",
+        "label": "trimestre",
+        "source": "enfant"
+      }
+    ]
+  },
+  {
+    "name": "bdj_information_classe",
+    "language": "fr",
+    "label": "Information de la classe",
+    "body": "Bonjour {{1}} 👋,\n📋 Information de la classe — {{2}} · {{3}}\n{{4}}\nPour toute question, contactez l'équipe.\n\nLes Bulles de Joie · Zongo 2, Parakou\nSecrétariat : 01 97 91 94 52",
+    "footer": "Amour · Travail · Discipline · Créativité",
+    "fields": [
+      {
+        "key": "parent",
+        "label": "parent",
+        "source": "enfant"
+      },
+      {
+        "key": "section",
+        "label": "section",
+        "source": "enfant"
+      },
+      {
+        "key": "trimestre",
+        "label": "trimestre",
+        "source": "enfant"
+      },
+      {
+        "key": "observation",
+        "label": "observation",
+        "source": "enfant"
+      }
+    ]
+  }
+]

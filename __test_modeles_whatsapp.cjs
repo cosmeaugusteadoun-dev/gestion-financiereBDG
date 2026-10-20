@@ -66,6 +66,10 @@ element('dashAnniversaires').querySelectorAll=()=>[bouton];
 let anniversaire=null;ctx.sendWhatsApp=(tel,texte)=>{anniversaire={tel,texte};};ctx.ouvrirModeleParent=()=>{throw new Error('Un anniversaire ne doit pas passer par un modèle API.');};
 ctx.renderAnniversaires();bouton.click();
 test('anniversaire : bouton individuel et texte original, sans modèle API',()=>{assert.equal(anniversaire.tel,ctx.creation.tel);assert.equal(anniversaire.texte,ctx.buildAnniversaireMessage(ctx.creation));assert.ok(anniversaire.texte.includes('Nous te souhaitons une année'));});
+ctx.campagneWhatsAppApi=null;ctx.sauvegarderCampagneWhatsAppApi();
+ctx.appelerWhatsAppApi=async()=>({templates:[]});
+await ctx.openWhatsAppApiModal({liste:[e]});
+test('liste serveur vide : diagnostic de configuration distinct de l’approbation Meta',()=>{assert.ok(html.includes('WHATSAPP_TEMPLATES_JSON'));assert.ok(html.includes('connexion au serveur fonctionne'));assert.ok(html.includes('pas importés automatiquement'));});
 console.log(`\n${n} scénarios modèles et consentement — TOUS LES TESTS PASSENT`);
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

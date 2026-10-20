@@ -59,6 +59,26 @@ Sa copie `.env` est ignorée par Git.
 
 ## 3. Faire approuver un premier modèle
 
+### Modèles déjà actifs dans Meta, mais liste vide dans le logiciel
+
+L'action `config` lit `WHATSAPP_TEMPLATES_JSON` dans Supabase. L'approbation Meta
+ne modifie pas ce secret automatiquement. Si sa valeur reste `[]`, le logiciel
+affiche une liste vide même lorsque tous les modèles Meta sont actifs.
+
+Dans **Edge Functions → Secrets**, modifier `WHATSAPP_TEMPLATES_JSON` et y coller
+tout le contenu de [whatsapp-collective-config.json](supabase/whatsapp-collective-config.json).
+Ce fichier contient les sept modèles du catalogue prévus pour la messagerie
+collective (bilan, deux relances, trois alertes et information de classe).
+Avant d'activer une entrée, vérifier le nom complet, le code de langue et l'ordre
+des variables avec le modèle approuvé dans Meta. Retirer les entrées non approuvées.
+Les captures aux noms tronqués ne suffisent pas à confirmer les noms exacts.
+Le classement Marketing ou Utilitaire ne change pas les paramètres d'envoi.
+Ce fichier n'active aucun bouton API dans les autres sections.
+
+Enregistrer le secret, fermer puis rouvrir le bouton API du logiciel. Aucun
+changement de token ni de Phone Number ID n'est nécessaire pour remplir cette liste.
+Le fichier est régénérable avec `node scripts/generer-config-whatsapp-collective.cjs`.
+
 Les modèles de notre application sont prêts dans [MODELES_WHATSAPP.md](MODELES_WHATSAPP.md),
 avec les corps à copier, pieds de page et exemples. Leurs paramètres sont remplis
 automatiquement depuis les dossiers, suivis et paiements ciblés. Commencer par

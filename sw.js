@@ -6,7 +6,7 @@
 // à chaque changement de fichier pour éviter de servir une version périmée
 // (même piège de cache agressif déjà rencontré côté navigateur).
 // ============================================================
-var CACHE_NAME = "bulles-de-joie-v46";
+var CACHE_NAME = "bulles-de-joie-v47";
 
 var APP_SHELL = [
   "index.html",
