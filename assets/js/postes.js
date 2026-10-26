@@ -58,6 +58,21 @@ var PONCTUEL_CRECHE_CATS = ["Halte-Garderie"];
 // saisi manuellement une fois la fréquentation réelle connue (voir
 // enfants.js, poste "is_reduit").
 var MOIS_CANTINE_REDUITS = ["Mar", "Jun", "Sep"];
+function tarifGarderie(mois) { return MOIS_CANTINE_REDUITS.includes(mois) ? 1500 : 3000; }
+function appliquerTarifsFixes(sect, postes, opt = {}) {
+  postes.filter(p => p.cat === "Garderie" && p.mois && !p.is_remise && p.key !== "avance").forEach(p => {
+    p.du = posteEstAbsent(p, opt) && !(Number(p.paye) > 0) ? 0 : tarifGarderie(p.mois);
+    p.is_var = false; p.is_reduit = false;
+    p.label = `Garderie ${p.mois}${MOIS_CANTINE_REDUITS.includes(p.mois) ? " (mois réduit)" : ""}`;
+  });
+  if (MAT_SECTS.includes(sect)) {
+    const lignes = postes.filter(p => p.cat === "Fournitures" && !p.is_remise && p.key !== "avance");
+    let restant = 20000;
+    lignes.forEach(p => { p.du = Math.min(Math.max(Number(p.paye) || 0, 0), restant); restant -= p.du; p.is_var = false; p.dl = "14/09"; });
+    if (lignes.length) (lignes.find(p => p.key === "four") || lignes[0]).du += restant;
+  }
+  return postes;
+}
 
 // ============================================================
 // GÉNÉRATION DES POSTES FINANCIERS
@@ -113,7 +128,7 @@ function buildPostes(sect, stat, opt) {
     };
     MOIS.forEach(m => {
       p.push({ key:`gard_${m}`, cat:"Garderie", label:`Garderie midi ${m}`,
-               du:3000, paye:0, mois:m, dl:moisDlG[m] });
+               du:tarifGarderie(m), paye:0, mois:m, dl:moisDlG[m] });
     });
   }
 
@@ -147,8 +162,8 @@ function buildPostes(sect, stat, opt) {
     // Garderie de midi : automatiquement incluse dès que le Déjeuner est
     // souscrit (l'enfant reste forcément sur place à midi), et disponible
     // seule pour les enfants qui apportent leur repas mais restent le midi.
-    // Contrairement à la cantine, son tarif reste fixe même en mois réduit.
-    if (opt.dej === "oui" || opt.gard === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`, cat:"Garderie", label:`Garderie midi ${m}`, du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+    // Garderie : tarif réduit de 1 500 F en septembre, mars et juin.
+    if (opt.dej === "oui" || opt.gard === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`, cat:"Garderie", label:`Garderie ${m}`, du:tarifGarderie(m), paye:0, mois:m, dl:MOIS_DL_5[m] }));
   }
 
   // ── PRIMAIRE (CI → CM1) ─────────────────────────────────────
@@ -178,7 +193,7 @@ function buildPostes(sect, stat, opt) {
     // Garderie de midi : automatiquement incluse dès que le Déjeuner est
     // souscrit (l'enfant reste forcément sur place à midi), et disponible
     // seule pour les enfants qui apportent leur repas mais restent le midi.
-    if (opt.dej === "oui" || opt.gard === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`, cat:"Garderie", label:`Garderie midi ${m}`, du:3000, paye:0, mois:m, dl:MOIS_DL_5[m] }));
+    if (opt.dej === "oui" || opt.gard === "oui") MOIS.forEach(m => p.push({ key:`gard_${m}`, cat:"Garderie", label:`Garderie ${m}`, du:tarifGarderie(m), paye:0, mois:m, dl:MOIS_DL_5[m] }));
   }
 
   // ── UNIFORMES (tous niveaux sauf crèche) ────────────────────
@@ -206,7 +221,7 @@ function buildPostes(sect, stat, opt) {
 
   // ── FOURNITURES (montant libre) ────────────────────────────
   if (opt.four === "oui") {
-    p.push({ key:"four", cat:"Fournitures", label:"Fournitures scolaires", du:0, paye:0, is_var:true });
+    p.push({ key:"four", cat:"Fournitures", label:"Fournitures scolaires", du:MAT_SECTS.includes(sect) ? 20000 : 0, paye:0, is_var:!MAT_SECTS.includes(sect), dl:MAT_SECTS.includes(sect) ? "14/09" : null });
   }
 
   // La remise (si accordée) n'est plus un poste fictif à part : elle est
@@ -217,6 +232,7 @@ function buildPostes(sect, stat, opt) {
   // bilans par secteur, ni sur le message WhatsApp envoyé aux parents.
 
   appliquerMoisNonSouscrits(p, opt);
+  appliquerTarifsFixes(sect, p, opt);
   return p;
 }
 

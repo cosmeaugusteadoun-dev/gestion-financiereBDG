@@ -4,3 +4,6 @@ project_id = "Gestion-financiere"
 # Cela permet d'utiliser la clé publishable actuelle du projet.
 [functions.whatsapp-send]
 verify_jwt = false
+
+[functions.push-notifications]
+verify_jwt = false

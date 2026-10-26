@@ -238,7 +238,7 @@ async function verifierParcours() {
   assert(run("calculerEncaisseParSecteurDepuisEntrees()['Crèche']") === 45000, "allocation partiellement orpheline : aucune recette perdue");
   assert(run("calculerEncaisseParSecteurBilan()['Crèche']") === 45000, "tableau de bord cohérent sans doubler inscription et mensualité");
   run("STATE.entrees=[];");
-  assert(run("calculerEncaisseParSecteurBilan()['Crèche']") === 45000, "anciens postes payés de crèche et inscription rattachés à la même carte");
+  assert(run("(calculerEncaisseParSecteurBilan()['Crèche'] || 0)") === 0, "crédits de dossiers sans entrée : pas d’encaissement de caisse inventé");
   run("STATE.postes=[{id:'f',enfant_id:'bebe',key:'four',cat:'Fournitures',du:0,paye:5000,is_var:true}]; STATE.entrees=[{enfant_id:'bebe',sect:'Crèche',mt:35000,allocations:[{poste_id:'f',montant:5000},{poste_id:'absent',montant:30000}]}];");
   assert(run("calculerEncaisseParSecteurDepuisEntrees()['Crèche']") === 30000, "retrouver une allocation ailleurs ne fait plus disparaître les 30 000 F de crèche");
   assert(run("Object.values(calculerEncaisseParSecteurDepuisEntrees()).reduce((s,n)=>s+n,0)") === 35000, "montant total conservé sans double comptage");

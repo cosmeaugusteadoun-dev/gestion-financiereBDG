@@ -242,6 +242,7 @@ function reconcilerPostes(enfant, newOpt) {
   // paiement classique, et mémorise les allocations dans newOpt pour
   // pouvoir l'annuler proprement la prochaine fois que le dossier change.
   appliquerMoisNonSouscrits(resultat, newOpt);
+  appliquerTarifsFixes(enfant.sect, resultat, newOpt);
   const allocationsRemise = appliquerRemise(resultat, newOpt.remiseCible, newOpt.remise);
   newOpt.remise_allocations = allocationsRemise.map(a => ({ poste_id: a.poste.id, montant: a.montant }));
 
@@ -512,6 +513,7 @@ function preparerMoisNonSouscrits(enfant, choix) {
       opt.mois_non_souscrits[p.key] = { absent: false, du: p.du };
     }
   });
+  appliquerTarifsFixes(enfant.sect, postes, opt);
   return { opt, postes };
 }
 
@@ -679,7 +681,7 @@ function openEditOptionsModal(enfantId) {
     { key: "dej",     label: "Déjeuner" },
     { key: "gout",    label: "Goûter" },
     { key: "gard",    label: "Garderie" },
-    { key: "four",    label: "Fournitures (montant libre)" },
+    { key: "four",    label: MAT_SECTS.includes(enfant.sect) ? "Fournitures (20 000 F CFA)" : "Fournitures (montant libre)" },
     { key: "cantC",   label: "Cantine crèche" },
     { key: "halte",   label: "Halte-garderie / Samedi / Nuitée" }
   ].filter(s => allowed.includes(s.key));
@@ -1157,6 +1159,12 @@ async function synchroniserEtReparerDossiers() {
     });
   }
 
+  for (const enfant of STATE.enfants) {
+    const lignes = STATE.postes.filter(p => p.enfant_id === enfant.id);
+    const avant = new Map(lignes.map(p => [p.id, JSON.stringify(p)]));
+    appliquerTarifsFixes(enfant.sect, lignes, enfant.opt || {});
+    lignes.forEach(p => { if (JSON.stringify(p) !== avant.get(p.id)) { postesAMettreAJour.push(p); modifs = true; } });
+  }
   if (modifs && postesAMettreAJour.length > 0) {
     try {
       await dbUpsertPostes([...new Map(postesAMettreAJour.map(p => [p.id, p])).values()]);

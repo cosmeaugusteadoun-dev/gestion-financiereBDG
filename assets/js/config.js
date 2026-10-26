@@ -23,7 +23,8 @@ window.APP_PASSWORD_HASH = "6051fc84a7a0d74c225fb18a496b09952da5642e60723ecae543
 // Protégée par un try/catch pour ne jamais bloquer l'écran de connexion
 // si la configuration Supabase est absente ou invalide.
 try {
-  window.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON, {
+  window.creerClientSupabase = window.creerClientSupabase || window.supabase.createClient;
+  window.supabase = window.creerClientSupabase(window.SUPABASE_URL, window.SUPABASE_ANON, {
     global: { fetch: async (url, options = {}) => {
       // Réessayer uniquement les lectures et PATCH idempotents après une coupure.
       // Aucun nouvel essai automatique pour les paiements ou messages (POST).

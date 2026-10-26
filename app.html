@@ -33,11 +33,13 @@
     </div>
     <div class="topbar-actions">
       <button class="btn btn-ghost topbar-desktop-only" id="btnChangerMdp"><i class="bi bi-key-fill"></i> Changer le mot de passe</button>
+      <button class="btn btn-ghost topbar-desktop-only" id="btnPushNotifications"><i class="bi bi-bell"></i> Notifications</button>
       <button class="btn-logout topbar-desktop-only" id="btnLogout">Déconnexion</button>
       <div class="topbar-burger-wrap">
         <button class="topbar-burger" id="btnBurgerMenu" aria-label="Menu" aria-haspopup="true" aria-expanded="false"><i class="bi bi-list"></i></button>
         <div class="topbar-burger-menu" id="burgerMenu" hidden>
           <button class="burger-menu-item" id="btnChangerMdpMobile"><i class="bi bi-key-fill"></i> Changer le mot de passe</button>
+          <button class="burger-menu-item" id="btnPushNotificationsMobile"><i class="bi bi-bell"></i> Notifications anniversaires</button>
           <button class="burger-menu-item burger-menu-item-danger" id="btnLogoutMobile"><i class="bi bi-box-arrow-right"></i> Déconnexion</button>
         </div>
       </div>
@@ -210,7 +212,7 @@
               <label class="checkbox-item" data-svc="dej"><input type="checkbox" id="svcDej"> Déjeuner</label>
               <label class="checkbox-item" data-svc="gout"><input type="checkbox" id="svcGout"> Goûter</label>
               <label class="checkbox-item" data-svc="gard"><input type="checkbox" id="svcGard"> Garderie</label>
-              <label class="checkbox-item" data-svc="four"><input type="checkbox" id="svcFour"> Fournitures (montant libre)</label>
+              <label class="checkbox-item" data-svc="four"><input type="checkbox" id="svcFour"> Fournitures (maternelle : 20 000 F ; autres classes : montant libre)</label>
               <label class="checkbox-item" data-svc="cantC"><input type="checkbox" id="svcCantC"> Cantine crèche</label>
               <label class="checkbox-item" data-svc="halte"><input type="checkbox" id="svcHalte"> Halte-garderie / Samedi / Nuitée</label>
             </div>
@@ -644,20 +646,21 @@
 
 <!-- ============ SDK & SCRIPTS ============ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=46"></script>
+<script src="assets/js/config.js?v=50"></script>
 <script src="assets/js/auth.js?v=44"></script>
 <script src="assets/js/db.js?v=46"></script>
-<script src="assets/js/postes.js?v=41"></script>
+<script src="assets/js/postes.js?v=48"></script>
 <script src="assets/js/whatsapp.js?v=46"></script>
 <script src="assets/js/whatsapp-modeles.js?v=46"></script>
 <script src="assets/js/whatsapp-api.js?v=47"></script>
-<script src="assets/js/enfants.js?v=46"></script>
-<script src="assets/js/entrees.js?v=46"></script>
-<script src="assets/js/sorties.js?v=41"></script>
-<script src="assets/js/dashboard.js?v=41"></script>
-<script src="assets/js/bilans.js?v=41"></script>
+<script src="assets/js/enfants.js?v=48"></script>
+<script src="assets/js/entrees.js?v=49"></script>
+<script src="assets/js/sorties.js?v=48"></script>
+<script src="assets/js/dashboard.js?v=50"></script>
+<script src="assets/js/bilans.js?v=49"></script>
 <script src="assets/js/notes.js?v=46"></script>
-<script src="assets/js/app.js?v=44"></script>
+<script src="assets/js/push-notifications.js?v=50"></script>
+<script src="assets/js/app.js?v=50"></script>
 <script src="assets/js/pwa-install.js?v=41"></script>
 <script>
   // Enregistrement du service worker (installation PWA + usage hors-ligne)

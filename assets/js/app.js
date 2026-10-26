@@ -13,6 +13,7 @@ function sessionValide() {
   }
 }
 if (!sessionValide()) {
+  if (new URLSearchParams(window.location.search).get("notifications") === "anniversaires") sessionStorage.setItem("bdj_push_open", "1");
   sessionStorage.removeItem("bdj_session");
   window.location.href = "index.html";
 }
@@ -57,6 +58,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initNotes();
 
   refreshAllTabs();
+  if (typeof initPushNotifications === "function") initPushNotifications();
   root.style.opacity = "1";
 });
 

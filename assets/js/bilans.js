@@ -121,33 +121,35 @@ function renderBilans() {
 
   const sortiesParSecteur = {};
   STATE.sorties.forEach(s => {
-    const sect = s.secteur || "Administratif / Divers";
+    const sect = carteBilanPourSecteur(s.secteur, null) || s.secteur || "Administratif / Divers";
     sortiesParSecteur[sect] = (sortiesParSecteur[sect] || 0) + (Number(s.mt) || 0);
   });
 
   const encaisseParEntree = calculerEncaisseParSecteurDepuisEntrees();
 
-  root.innerHTML = BILAN_CATEGORIES_FIXES.map((entry, idx) => {
+  const categories = [...BILAN_CATEGORIES_FIXES];
+  new Set([...Object.keys(encaisseParEntree), ...Object.keys(sortiesParSecteur)]).forEach(label => {
+    if (!categories.some(e => e.label === label)) categories.push({ label, match: () => false });
+  });
+  majCompteurListe(root, categories.length);
+  root.innerHTML = categories.map((entry, idx) => {
     let du = 0, payePostes = 0, avance = 0;
     STATE.postes.forEach(p => {
       if (p.is_remise) return;
       if (!entry.match(p, enfantParId[p.enfant_id])) return;
       // Le poste « Avance / Trop-perçu » ne porte aucun dû, mais l'argent est
       // bien reçu : il compte dans l'encaissé du secteur.
-      if (p.key === "avance") avance += p.paye || 0;
+      if (p.key === "avance") avance += Number(p.paye) || 0;
       else {
-        du += p.du || 0;
-        payePostes += p.paye || 0;
+        du += Number(p.du) || 0;
+        payePostes += Number(p.paye) || 0;
       }
     });
 
-    // Ce que les familles ont réellement versé pour ce secteur : les postes
-    // crédités + les avances, et au minimum ce que disent les entrées
-    // enregistrées (montant supérieur au dû, service souscrit après coup, ou
-    // entrée saisie avant l'imputation automatique — autant de cas où l'argent
-    // encaissé ne remontait sur aucune carte).
-    const paye = payePostes + avance;
-    const encaisse = Math.max(paye, encaisseParEntree[entry.label] || 0);
+    // La caisse provient uniquement des entrées. Les crédits des dossiers
+    // servent au suivi des créances et peuvent inclure des remises.
+    const paye = payePostes;
+    const encaisse = encaisseParEntree[entry.label] || 0;
 
     const sortiesImputees = sortiesParSecteur[entry.label] || 0;
     const couleur = BILAN_SECTEUR_COULEURS[idx % BILAN_SECTEUR_COULEURS.length];
@@ -224,97 +226,82 @@ function carteBilanPourPoste(p, enfant) {
 }
 
 // Ne compter chaque franc qu'une fois, même si une partie des postes a disparu.
-function calculerEncaisseParSecteurDepuisEntrees() {
-  const enfantParId = new Map(STATE.enfants.map(e => [e.id, e]));
-  const posteParId = new Map(STATE.postes.map(p => [p.id, p]));
-  const total = {};
-  STATE.entrees.forEach(en => {
+// Ventilation commune : chaque montant de caisse n'est compté qu'une fois.
+function ventilerEncaissements() {
+  const enfants = new Map(STATE.enfants.map(e => [e.id, e]));
+  const postes = new Map(STATE.postes.map(p => [p.id, p]));
+  const lignes = [];
+  let paiementsEstimes = 0;
+  const noms = [...Object.keys(SECTEUR_ENTREE_VERS_CARTE), "Inscription"];
+  const normaliser = nom => {
+    const cle = normaliserSecteurBilan(nom);
+    if (["creche (garderie)", "creche / garderie"].includes(cle)) return "Crèche";
+    if (cle === "garderie midi") return "Garderie";
+    return noms.find(s => normaliserSecteurBilan(s) === cle) || String(nom || "").trim() || "Non classé";
+  };
+  for (const en of STATE.entrees) {
     const montant = Number(en.mt);
-    if (!Number.isFinite(montant) || montant <= 0) return;
-    const enfant = enfantParId.get(en.enfant_id);
-    const secteurs = [...new Set(String(en.sect || "").split(",").map(s => s.trim()).filter(Boolean))];
-    const cartesDeclarees = secteurs.map(s => carteBilanPourSecteur(s, enfant)).filter(Boolean);
-    const cartesUniques = [...new Set(cartesDeclarees)];
-    let impute = 0;
-
-    (Array.isArray(en.allocations) ? en.allocations : []).forEach(a => {
-      const versement = Math.min(Math.max(Number(a.montant) || 0, 0), montant - impute);
-      if (!Number.isFinite(versement) || versement <= 0) return;
-      const poste = posteParId.get(a.poste_id);
-      const archive = a.poste && a.poste.id === a.poste_id ? a.poste : null;
-      const carte = carteBilanPourSecteur(a.secteur, enfant)
-        || carteBilanPourPoste(poste, (poste && enfantParId.get(poste.enfant_id)) || enfant)
-        || carteBilanPourPoste(archive, (archive && enfantParId.get(archive.enfant_id)) || enfant)
-        || (cartesUniques.length === 1 ? cartesUniques[0] : null);
-      if (!carte) return;
-      total[carte] = (total[carte] || 0) + versement;
-      impute += versement;
-    });
-
-    // Une allocation retrouvée ne doit plus faire disparaître le reste de l'entrée.
-    const restant = montant - impute;
-    if (restant > 0 && cartesDeclarees.length) {
-      cartesDeclarees.forEach(carte => {
-        total[carte] = (total[carte] || 0) + restant / cartesDeclarees.length;
-      });
+    if (!Number.isFinite(montant) || montant <= 0) continue;
+    const enfant = enfants.get(en.enfant_id);
+    const declares = [...new Set(String(en.sect || "").split(",").map(s => s.trim()).filter(Boolean).map(normaliser))];
+    let impute = 0, estime = false;
+    for (const a of (Array.isArray(en.allocations) ? en.allocations : [])) {
+      const valeur = Number(a.montant);
+      if (!Number.isFinite(valeur) || valeur <= 0) continue;
+      const poste = postes.get(a.poste_id) || (a.poste?.id === a.poste_id ? a.poste : null);
+      const dossier = (poste && enfants.get(poste.enfant_id)) || enfant;
+      const secteur = a.secteur ? normaliser(a.secteur)
+        : poste ? normaliser(secteurEnregistrementPoste(poste, dossier))
+        : declares.length === 1 ? declares[0] : null;
+      if (!secteur) continue;
+      const part = Math.min(valeur, montant - impute);
+      if (part <= 0) continue;
+      lignes.push({ secteur, enfant: dossier, montant: part, estime: false });
+      impute += part;
     }
+    const reste = montant - impute;
+    if (reste > 0) {
+      const cibles = declares.length ? declares : ["Non classé"];
+      const base = Math.floor(reste / cibles.length);
+      let supplement = reste - base * cibles.length;
+      cibles.forEach(secteur => {
+        const ajout = Math.min(1, supplement); supplement -= ajout;
+        const part = base + ajout;
+        if (part > 0) lignes.push({ secteur, enfant, montant: part, estime: cibles.length > 1 });
+      });
+      estime = cibles.length > 1;
+    }
+    if (estime) paiementsEstimes++;
+  }
+  return { lignes, paiementsEstimes };
+}
+function calculerEncaisseParSecteurDepuisEntrees() {
+  const total = {};
+  ventilerEncaissements().lignes.forEach(l => {
+    const carte = carteBilanPourSecteur(l.secteur, l.enfant) || "Non classé";
+    total[carte] = (total[carte] || 0) + l.montant;
   });
   return total;
 }
-// Encaissé par secteur — exactement le même calcul que les cartes du
-// "Bilan par secteur" (postes crédités + avances, puis au minimum le total
-// réellement reçu d'après les entrées), pour que le Tableau de bord affiche
-// des montants parfaitement cohérents avec cet onglet.
 function calculerEncaisseParSecteurBilan() {
-  const enfantParId = {};
-  STATE.enfants.forEach(e => { enfantParId[e.id] = e; });
-
-  const encaisseParEntree = calculerEncaisseParSecteurDepuisEntrees();
-
-  const encaisseParSecteur = {};
-  BILAN_CATEGORIES_FIXES.forEach(entry => {
-    let paye = 0;
-    STATE.postes.forEach(p => {
-      if (p.is_remise) return;
-      if (entry.match(p, enfantParId[p.enfant_id])) paye += p.paye || 0;
-    });
-    const encaisse = Math.max(paye, encaisseParEntree[entry.label] || 0);
-    if (encaisse > 0) encaisseParSecteur[entry.label] = encaisse;
-  });
-  return encaisseParSecteur;
+  return calculerEncaisseParSecteurDepuisEntrees();
 }
 
 // Recettes réellement ventilées, réutilisées par le Bilan général et les
 // Entrées. separerRepas garde les services de cantine distincts à la saisie.
 function secteurEnregistrementPoste(p, enfant) {
   if (p.key === "inscr") return "Inscription";
-  if (p.key.indexOf("ptdej_") === 0) return "Petit-déjeuner";
-  if (p.key.indexOf("dej_") === 0) return "Déjeuner";
+  if (String(p.key || "").indexOf("ptdej_") === 0) return "Petit-déjeuner";
+  if (String(p.key || "").indexOf("dej_") === 0) return "Déjeuner";
   if (p.cat === "Scolarité") return enfant && PRIM_SECTS.includes(enfant.sect) ? "Scolarité Primaire" : "Scolarité Maternelle";
   return p.cat;
 }
 
 function calculerRecettesParSecteur(separerRepas = false) {
   const total = {};
-  const ajouter = (secteur, montant) => {
-    const cle = !separerRepas && ["Petit-déjeuner", "Déjeuner"].includes(secteur) ? "Cantine" : secteur;
-    total[cle] = (total[cle] || 0) + montant;
-  };
-  STATE.entrees.forEach(en => {
-    const montant = Number(en.mt) || 0;
-    let impute = 0;
-    (en.allocations || []).forEach(a => {
-      const poste = STATE.postes.find(p => p.id === a.poste_id);
-      if (!poste) return;
-      const versement = Math.min(Math.max(Number(a.montant) || 0, 0), montant - impute);
-      if (versement <= 0) return;
-      ajouter(a.secteur || secteurEnregistrementPoste(poste, STATE.enfants.find(e => e.id === poste.enfant_id)), versement);
-      impute += versement;
-    });
-    // Sans ventilation historique, répartir uniquement le montant non tracé.
-    const secteurs = [...new Set((en.sect || "").split(",").map(s => s.trim()).filter(Boolean))];
-    if (!secteurs.length) secteurs.push("Non classé");
-    if (montant > impute) secteurs.forEach(s => ajouter(s, (montant - impute) / secteurs.length));
+  ventilerEncaissements().lignes.forEach(l => {
+    const cle = !separerRepas && ["Petit-déjeuner", "Déjeuner"].includes(l.secteur) ? "Cantine" : l.secteur;
+    total[cle] = (total[cle] || 0) + l.montant;
   });
   return total;
 }
@@ -342,7 +329,7 @@ function renderBilanGeneral() {
   // Dépenses par secteur imputé (nouveau champ des Sorties)
   const depensesParSecteur = {};
   STATE.sorties.forEach(s => {
-    const sect = s.secteur || "Administratif / Divers";
+    const sect = carteBilanPourSecteur(s.secteur, null) || s.secteur || "Administratif / Divers";
     depensesParSecteur[sect] = (depensesParSecteur[sect] || 0) + (Number(s.mt) || 0);
   });
 

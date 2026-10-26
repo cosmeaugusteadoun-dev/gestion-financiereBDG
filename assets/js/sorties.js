@@ -3,7 +3,7 @@
 // ============================================================
 
 function initSorties() {
-  document.getElementById("sDate").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("sDate").value = jourComptable();
   document.getElementById("formSortie").addEventListener("submit", handleCreateSortie);
   document.getElementById("btnResetSortie").addEventListener("click", resetSortieForm);
 
@@ -26,7 +26,7 @@ function initSorties() {
 
 function resetSortieForm() {
   document.getElementById("formSortie").reset();
-  document.getElementById("sDate").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("sDate").value = jourComptable();
   document.querySelectorAll('#sSecteurs .checkbox-item').forEach(item => item.classList.remove("checked", "disabled"));
   document.querySelectorAll('input[name="sSecteur"]').forEach(radio => { radio.disabled = false; });
 }

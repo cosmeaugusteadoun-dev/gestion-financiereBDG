@@ -163,6 +163,7 @@ function joursAvantAnniversaire(ddn) {
 }
 
 function renderAnniversaires() {
+  if (typeof actualiserBadgeAnniversaires === "function") actualiserBadgeAnniversaires();
   const root = document.getElementById("dashAnniversaires");
   if (!root) return;
 

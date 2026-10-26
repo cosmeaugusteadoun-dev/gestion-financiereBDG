@@ -11,7 +11,9 @@ var TRANCHE_LABELS_ENTREE = { t1: "1ère tranche", t2: "2ème tranche", t3: "3è
 // INITIALISATION DU MODULE
 // ============================================================
 function initEntrees() {
-  document.getElementById("eDate").value = new Date().toISOString().slice(0, 10);
+  planifierCompteursJour();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { renderEntreesMetrics(); planifierCompteursJour(); } });
+  document.getElementById("eDate").value = jourComptable();
 
   document.getElementById("eNom").addEventListener("input", handleNomInput);
   document.addEventListener("click", (e) => {
@@ -219,7 +221,7 @@ function reinitialiserFiltreSecteurs() {
 
 function resetEntreeForm() {
   document.getElementById("formEntree").reset();
-  document.getElementById("eDate").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("eDate").value = jourComptable();
   document.querySelectorAll('input[name="eSect"]').forEach(cb => cb.closest(".checkbox-item").classList.remove("checked"));
   document.getElementById("eNomSuggestions").style.display = "none";
   selectedEnfantId = null;
@@ -570,6 +572,7 @@ function completerPostesEnfant(enfant) {
     console.warn(`Postes manquants complétés pour ${enfant.nom} : ${manquants.map(p => p.key).join(", ")}`);
     STATE.postes.push(...manquants);
   }
+  appliquerTarifsFixes(enfant.sect, STATE.postes.filter(p => p.enfant_id === enfant.id), enfant.opt || {});
   return manquants;
 }
 
@@ -650,6 +653,7 @@ async function handleCreateEntree(e) {
       completerPostesEnfant(enfant);
       postesEnfant = STATE.postes.filter(p => p.enfant_id === enfant.id).map(p => ({ ...p }));
       const allocations = imputerPaiementMultiSecteur(postesEnfant, secteurs, montant, moisDepart, repartition);
+      appliquerTarifsFixes(enfant.sect, postesEnfant, enfant.opt || {});
 
       // Notifie le versé/restant de l'échéance ciblée (mois ou tranche) —
       // utile surtout quand le paiement ne la solde pas entièrement.
@@ -741,11 +745,24 @@ function openConfirmerEnvoiRecuModal(enfant, entree) {
 // Mini-bilan en haut de l'onglet : total encaissé, nombre d'opérations, et
 // les 3 secteurs qui ont le plus rapporté — pour un coup d'œil rapide sans
 // devoir aller sur Bilans secteurs.
+function jourComptable(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en", { timeZone: "Africa/Porto-Novo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const valeur = type => parts.find(p => p.type === type).value;
+  return `${valeur("year")}-${valeur("month")}-${valeur("day")}`;
+}
+var minuterieCompteursJour = null;
+function planifierCompteursJour() {
+  if (minuterieCompteursJour) clearTimeout(minuterieCompteursJour);
+  const demain = Date.parse(`${jourComptable()}T00:00:00+01:00`) + 86400000;
+  minuterieCompteursJour = setTimeout(() => { renderEntreesMetrics(); planifierCompteursJour(); }, Math.max(1000, demain - Date.now() + 100));
+}
 function renderEntreesMetrics() {
   const root = document.getElementById("entreesMetrics");
   if (!root) return;
 
   const total = STATE.entrees.reduce((s, e) => s + (Number(e.mt) || 0), 0);
+  const jour = jourComptable();
+  const totalJour = liste => liste.filter(e => String(e.date || "").slice(0, 10) === jour).reduce((s, e) => s + (Number(e.mt) || 0), 0);
   const recettesParSecteur = calculerRecettesParSecteur(true);
   const ventilation = document.getElementById("entreesVentilation");
   if (ventilation) {
@@ -754,6 +771,14 @@ function renderEntreesMetrics() {
     ventilation.innerHTML = secteurs.length ? secteurs.map(([sect, mt]) =>
       `<div class="poste-row"><div class="poste-label">${escapeHtml(sect)}</div><div class="poste-amounts">${fmtFCFA(mt)}</div></div>`).join("")
       : '<p class="text-muted">Aucun encaissement enregistré.</p>';
+    if (typeof ventilerEncaissements === "function") {
+      const bilan = calculerEncaisseParSecteurDepuisEntrees();
+      const somme = Object.values(recettesParSecteur).reduce((s, v) => s + v, 0);
+      const controles = ventilerEncaissements();
+      ventilation.innerHTML += `<p class="field-hint">Total ventilé : ${fmtFCFA(somme)} · Total des entrées : ${fmtFCFA(total)}. Les inscriptions rejoignent la section de l'enfant dans les bilans ; Petit-déjeuner et Déjeuner y sont regroupés en Cantine.</p>
+        ${controles.paiementsEstimes ? `<p class="field-hint">${controles.paiementsEstimes} ancien(s) paiement(s) sans ventilation complète : répartition indicative, à vérifier dans les entrées.</p>` : ""}
+        <details><summary>Totaux regroupés comme les bilans par secteur</summary>${Object.entries(bilan).map(([s, v]) => `<div class="poste-row"><div class="poste-label">${escapeHtml(libelleSecteurFinance(s))}</div><div class="poste-amounts">${fmtFCFA(v)}</div></div>`).join("")}</details>`;
+    }
   }
   const topSecteurs = Object.entries(recettesParSecteur)
     .sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -765,6 +790,8 @@ function renderEntreesMetrics() {
 
   root.innerHTML = `
     <div class="metric-card metric-green"><div class="metric-label">Total entrées</div><div class="metric-value">${fmtFCFA(total)}</div></div>
+    <div class="metric-card metric-green"><div class="metric-label">Entrées du jour</div><div class="metric-value">${fmtFCFA(totalJour(STATE.entrees))}</div></div>
+    <div class="metric-card metric-gold"><div class="metric-label">Sorties du jour</div><div class="metric-value">${fmtFCFA(totalJour(STATE.sorties || []))}</div></div>
     <div class="metric-card metric-navy"><div class="metric-label">Opérations</div><div class="metric-value">${STATE.entrees.length}</div></div>
     ${tuilesSecteurs}
   `;
